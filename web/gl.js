@@ -15,7 +15,8 @@ precision highp float;
 precision highp sampler3D;
 in vec2 v_uv;
 out vec4 o;
-uniform sampler2D uOrig, uHalo, uGrain, uLeak;
+uniform sampler2D uOrig, uHalo, uGrain, uLeak, uBloom;
+uniform float uMist;          // Black Pro-Mist style bloom
 uniform sampler3D uLut;
 uniform float uAspect, uStrength, uHalation, uVignette, uGrainAmt, uBefore;
 uniform vec2 uGrainScale;     // image pixels / grain tile pixels
@@ -185,6 +186,14 @@ void main() {
   vec3 film = texture(uLut, orig * (63.0 / 64.0) + 0.5 / 64.0).rgb;
   vec3 c = mix(orig, film, uStrength);
 
+  // Mist filter: highlights bloom in their own colour and contrast softens a
+  // touch, while the blacks stay put (that is what makes it a *black* mist).
+  if (uMist > 0.0) {
+    vec3 bloom = texture(uBloom, v_uv).rgb;
+    c = screen(c, bloom * uMist);
+    c = mix(c, c * 0.93 + 0.035 * smoothstep(0.05, 0.4, c), uMist * 0.5);
+  }
+
   vec2 q = (v_uv - 0.5) * vec2(uAspect, 1.0) / (0.5 * length(vec2(uAspect, 1.0)));
   c *= 1.0 - uVignette * 0.8 * smoothstep(0.35, 1.05, length(q));
 
@@ -319,10 +328,14 @@ export class FilmRenderer {
     gl.activeTexture(gl.TEXTURE4);
     gl.bindTexture(gl.TEXTURE_3D, this.tex.lut || null);
     gl.uniform1i(this._u("uLut"), 4);
+    gl.activeTexture(gl.TEXTURE6);
+    gl.bindTexture(gl.TEXTURE_2D, this.tex.bloom || this.black);
+    gl.uniform1i(this._u("uBloom"), 6);
 
     const f = (n, v) => gl.uniform1f(this._u(n), v);
     f("uAspect", p.aspect); f("uStrength", p.strength); f("uHalation", p.halation);
     f("uVignette", p.vignette); f("uGrainAmt", p.grain); f("uBefore", p.before ? 1 : 0);
+    f("uMist", p.mist || 0);
     // Grain is sized in source-image pixels so it looks the same at any zoom.
     const px = p.imageWidth || width, py = p.imageHeight || height;
     gl.uniform2f(this._u("uGrainScale"), px / this.grainSize[0], py / this.grainSize[1]);

@@ -1,6 +1,6 @@
 import { FilmRenderer } from "./gl.js";
 import { analyseLight, generatedLeak, hashSeed, newSeed, realLeak, rng } from "./leaks.js";
-import { GRAINS, STOCKS, decodeFull, decodeThumb, haloMask, loadGrain, loadLut } from "./pipeline.js";
+import { GRAINS, STOCKS, bloomMap, decodeFull, decodeThumb, haloMask, loadGrain, loadLut } from "./pipeline.js";
 import { extractExif, withExif } from "./exif.js";
 import { ARTIFACT_KINDS, anyArtifacts, artifactParams } from "./artifacts.js";
 import * as src from "./sources.js";
@@ -12,6 +12,7 @@ const DEFAULTS = {
   stock: "kodachrome64",
   strength: 0.85,
   halation: 0.25,
+  mist: 0,
   vignette: 0.3,
   grain: 0.35,
   grainType: "kodachrome64",
@@ -50,7 +51,7 @@ async function prepare(photo) {
   if (photo.ready) return photo.ready;
   photo.ready = (async () => {
     const { thumb, peak, width, height } = await decodeThumb(await photo.getBlob());
-    Object.assign(photo, { thumb, width, height, halo: haloMask(peak), light: analyseLight(thumb) });
+    Object.assign(photo, { thumb, width, height, halo: haloMask(peak), bloom: bloomMap(peak), light: analyseLight(thumb) });
   })();
   return photo.ready;
 }
@@ -203,7 +204,7 @@ function params(photo, leak, { grain = true, art = null } = {}) {
   return {
     aspect: photo.width / photo.height,
     imageWidth: photo.width, imageHeight: photo.height,
-    strength: s.strength, halation: s.halation, vignette: s.vignette,
+    strength: s.strength, halation: s.halation, mist: s.mist, vignette: s.vignette,
     grain: grain ? s.grain * g.amount : 0, grainSize: g.size, grainChroma: g.chroma,
     before: app.before, leak,
     artifacts: art,
@@ -228,6 +229,7 @@ function requestRender() {
       if (view.photoId !== photo.id) {
         view.setImage("orig", photo.thumb);
         view.setImage("halo", photo.halo);
+        view.setImage("bloom", photo.bloom);
         view.photoId = photo.id;
         view.isFull = false;
         fullBitmap(photo).then((bmp) => {
@@ -298,6 +300,7 @@ async function renderThumbs() {
     if (run !== thumbRun) return; // superseded by a newer change
     thumbs.setImage("orig", photo.thumb);
     thumbs.setImage("halo", photo.halo);
+    thumbs.setImage("bloom", photo.bloom);
     const w = Math.round(cv.clientWidth * dpr) || 300;
     const h = Math.round((w * photo.height) / photo.width);
     thumbs.canvas.width = w;
@@ -539,6 +542,7 @@ async function exportPhotos(list) {
       const full = await decodeFull(blob);
       off.setImage("orig", full);
       off.setImage("halo", photo.halo);
+      off.setImage("bloom", photo.bloom);
       const leak = await leakFor(off, photo);
       const art = await artifactsFor(off, photo);
       const jpeg = await off.exportJpeg(full.width, full.height, { ...params(photo, leak, { art }), before: false });

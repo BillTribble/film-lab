@@ -65,17 +65,59 @@ function peakLuminance(img, maxSide) {
   const src = ctx.getImageData(0, 0, W, H).data;
   const cell = Math.max(1, Math.ceil(Math.max(W, H) / maxSide));
   const w = Math.ceil(W / cell), h = Math.ceil(H / cell);
-  const data = new Float32Array(w * h);
+  const data = new Float32Array(w * h);      // brightest luminance per cell
+  const rgb = new Float32Array(w * h * 3);   // colour of that brightest pixel
+  const avg = new Float32Array(w * h * 3);   // average colour of the cell
+  const count = new Float32Array(w * h);
   for (let y = 0; y < H; y++) {
     const row = Math.floor(y / cell) * w;
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
-      const l = (0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2]) / 255;
+      const r = src[i] / 255, g = src[i + 1] / 255, b = src[i + 2] / 255;
+      const l = 0.299 * r + 0.587 * g + 0.114 * b;
       const j = row + Math.floor(x / cell);
-      if (l > data[j]) data[j] = l;
+      avg[j * 3] += r; avg[j * 3 + 1] += g; avg[j * 3 + 2] += b; count[j]++;
+      if (l > data[j]) {
+        data[j] = l;
+        rgb[j * 3] = r; rgb[j * 3 + 1] = g; rgb[j * 3 + 2] = b;
+      }
     }
   }
-  return { w, h, data };
+  for (let j = 0; j < w * h; j++) for (let c = 0; c < 3; c++) avg[j * 3 + c] /= count[j] || 1;
+  return { w, h, data, rgb, avg };
+}
+
+/**
+ * Mist (Black Pro-Mist style) bloom map: highlights in their own colour,
+ * spread by a tight and a very wide glow. Starts lower than halation, since
+ * a mist filter softens bright midtones too, not just light sources.
+ */
+export function bloomMap(peak) {
+  const { w, h, data, rgb, avg } = peak;
+  const side = Math.max(w, h);
+  const ch = [0, 1, 2].map(() => new Float32Array(w * h));
+  const ss = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+  for (let i = 0; i < w * h; i++) {
+    // Large bright areas bloom by their average light (soft); small point
+    // lights add a little extra from their peak so they still sparkle.
+    const la = 0.299 * avg[i * 3] + 0.587 * avg[i * 3 + 1] + 0.114 * avg[i * 3 + 2];
+    const ka = ss(0.62, 1.0, la), kp = ss(0.85, 1.0, data[i]) * 0.35;
+    for (let c = 0; c < 3; c++) ch[c][i] = avg[i * 3 + c] * ka + rgb[i * 3 + c] * kp;
+  }
+  const blur = (src, r) => {
+    let out = src;
+    for (let pass = 0; pass < 3; pass++) out = boxBlur(boxBlur(out, w, h, r, true), w, h, r, false);
+    return out;
+  };
+  const rt = Math.max(1, Math.round(side * 0.006)), rw = Math.max(2, Math.round(side * 0.03));
+  const d = new ImageData(w, h);
+  const tight = ch.map((c) => blur(c, rt));
+  const wide = ch.map((c) => blur(c, rw));
+  for (let i = 0; i < w * h; i++) {
+    for (let c = 0; c < 3; c++) d.data[i * 4 + c] = Math.min(1, tight[c][i] * 0.6 + wide[c][i] * 1.7) * 255;
+    d.data[i * 4 + 3] = 255;
+  }
+  return d;
 }
 
 /**
