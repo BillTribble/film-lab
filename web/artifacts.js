@@ -64,7 +64,8 @@ export function artifactParams(seed, kinds, amount, aspect) {
     if (kinds.spots && keep < amount * 0.75) p.spots.push(x, y, radius, strength);
   }
 
-  p.opacity = Math.min(1, 0.4 + amount * 0.8);
+  // Fewer marks AND fainter marks at low amounts, so the slider fades in from nothing.
+  p.opacity = Math.min(1, Math.pow(amount, 0.8) * 1.2);
   return p;
 }
 

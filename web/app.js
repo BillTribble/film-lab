@@ -191,7 +191,8 @@ async function artifactsFor(r, photo) {
       name: L.name,
       matrix: L.matrix,
       blend: scan.light.mean < 0.5 ? 1 : 2, // light marks on black: screen; dark on white: multiply
-      amount: Math.min(1, s.artifactAmt * 1.1),
+      // Dust overlays are high-contrast, so ease in: faint at the low end.
+      amount: Math.pow(s.artifactAmt, 2.2) * 0.9,
     },
   };
 }
