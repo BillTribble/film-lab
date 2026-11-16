@@ -30,9 +30,9 @@
     <h1 class="title">Film lab</h1>
     <span class="meta" id="folder-label"></span>
     <div class="top-actions">
-      <button class="btn-outlined" data-pick="photo-input"><span class="material-symbols-outlined">add_photo_alternate</span>Import photos</button>
-      <button class="btn-tonal" id="export-one"><span class="material-symbols-outlined">download</span>Export photo</button>
-      <button class="btn" id="export-all"><span class="material-symbols-outlined">download</span>Export all</button>
+      <button class="btn-outlined" data-pick="photo-input" aria-label="Import photos"><span class="material-symbols-outlined">add_photo_alternate</span><span class="btn-label">Import photos</span></button>
+      <button class="btn-tonal" id="export-one" aria-label="Export photo"><span class="material-symbols-outlined">download</span><span class="btn-label">Export photo</span></button>
+      <button class="btn" id="export-all" aria-label="Export all"><span class="material-symbols-outlined">download_for_offline</span><span class="btn-label">Export all</span></button>
     </div>
   </header>
 
@@ -51,6 +51,12 @@
     </section>
 
     <aside class="pane controls">
+      <div class="button-row quick-roll">
+        <button class="btn" data-action="reroll"><span class="material-symbols-outlined">casino</span>Re-roll</button>
+        <button class="btn-outlined" data-action="reroll-all"><span class="material-symbols-outlined">casino</span>All</button>
+        <button class="btn-outlined" data-action="undo" aria-label="Undo re-roll"><span class="material-symbols-outlined">undo</span>Undo</button>
+      </div>
+
       <section class="group">
         <h2 class="section-title">Film stock</h2>
         <div class="m3-pill-tabs" id="stocks" role="tablist"></div>
@@ -82,10 +88,10 @@
           <span>Follow the light</span>
           <input type="checkbox" class="m3-switch" data-setting="aware">
         </label>
-        <div class="button-row">
-          <button class="btn-tonal" id="reroll"><span class="material-symbols-outlined">casino</span>Re-roll</button>
-          <button class="btn-outlined" id="reroll-all"><span class="material-symbols-outlined">casino</span>Re-roll all</button>
-          <button class="btn-outlined" id="undo" title="Undo re-roll (⌘Z)"><span class="material-symbols-outlined">undo</span>Undo</button>
+        <div class="button-row leak-actions">
+          <button class="btn-tonal" data-action="reroll"><span class="material-symbols-outlined">casino</span>Re-roll</button>
+          <button class="btn-outlined" data-action="reroll-all"><span class="material-symbols-outlined">casino</span>Re-roll all</button>
+          <button class="btn-outlined" data-action="undo" title="Undo re-roll (⌘Z)"><span class="material-symbols-outlined">undo</span>Undo</button>
         </div>
         <div class="button-row" id="real-tools" hidden>
           <button class="btn-outlined" data-pick="leak-input"><span class="material-symbols-outlined">add</span>Add leak scans</button>

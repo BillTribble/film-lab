@@ -177,7 +177,11 @@ function requestRender() {
 function sizeCanvas(photo) {
   const stage = $("#stage");
   const pad = 16;
-  const scale = Math.min((stage.clientWidth - pad * 2) / photo.width, (stage.clientHeight - pad * 2) / photo.height);
+  // Phones: the page scrolls, so fit the photo to the width (capped at 75% of the
+  // screen height). Desktop: fit inside the stage.
+  const phone = matchMedia("(max-width: 840px)").matches;
+  const maxH = phone ? window.innerHeight * 0.75 : stage.clientHeight - pad * 2;
+  const scale = Math.min((stage.clientWidth - pad * 2) / photo.width, maxH / photo.height);
   const cssW = Math.max(1, Math.floor(photo.width * scale)), cssH = Math.max(1, Math.floor(photo.height * scale));
   const dpr = window.devicePixelRatio || 1;
   const cv = $("#view");
@@ -310,9 +314,8 @@ function syncControls() {
     if (out) out.textContent = `${Math.round(v * 100)}%`;
   });
   const leaksOn = s.leakMode !== "off";
-  $("#reroll").disabled = !leaksOn;
-  $("#reroll-all").disabled = !leaksOn;
-  $("#undo").disabled = !app.undo.length;
+  document.querySelectorAll('[data-action="reroll"], [data-action="reroll-all"]').forEach((b) => { b.disabled = !leaksOn; });
+  document.querySelectorAll('[data-action="undo"]').forEach((b) => { b.disabled = !app.undo.length; });
   $("#real-tools").hidden = s.leakMode !== "real" && s.leakMode !== "mix";
   $("#leak-pack-link").hidden = src.isLocal();
 }
@@ -408,9 +411,8 @@ function bindEvents() {
       requestRender();
     });
   });
-  $("#reroll").addEventListener("click", () => reroll(false));
-  $("#reroll-all").addEventListener("click", () => reroll(true));
-  $("#undo").addEventListener("click", undoReroll);
+  const actions = { reroll: () => reroll(false), "reroll-all": () => reroll(true), undo: undoReroll };
+  document.querySelectorAll("[data-action]").forEach((b) => b.addEventListener("click", () => actions[b.dataset.action]?.()));
   $("#export-one").addEventListener("click", run(() => exportPhotos([app.photos[app.current]].filter(Boolean))));
   $("#export-all").addEventListener("click", run(() => exportPhotos(app.photos)));
 

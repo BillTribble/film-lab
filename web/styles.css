@@ -251,14 +251,24 @@ body.dragging .stage { box-shadow: inset 0 0 0 3px var(--md-sys-color-primary); 
 }
 .error-text { white-space: pre-wrap; font-size: 12px; }
 
-/* ---- narrow screens: stack panes ---- */
+.quick-roll { display: none; }
+
+/* ---- phones: photo on top, filmstrip, then controls; the page scrolls ---- */
 @media (max-width: 840px) {
-  body { overflow: auto; height: auto; }
-  .shell { grid-template-columns: 1fr; }
-  .strip { flex-direction: row; overflow-x: auto; scrollbar-width: none; }
+  html, body { overflow: auto; height: auto; }
+  .shell { display: flex; flex-direction: column; }
+  .stage { order: 1; min-height: 0; padding: 16px; }
+  .strip { order: 2; flex-direction: row; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
   .strip::-webkit-scrollbar { display: none; }
-  .thumb { width: 120px; }
-  .stage { min-height: 60vh; }
-  .top-bar { flex-wrap: wrap; padding: 8px 16px; }
-  .top-actions { margin-left: 0; flex-wrap: wrap; }
+  .controls { order: 3; overflow: visible; }
+  .strip { align-items: center; }
+  .thumb { width: 96px; }
+  .quick-roll { display: flex; flex-wrap: nowrap; }
+  .quick-roll > button { flex: 1; justify-content: center; min-height: 48px; }
+  .leak-actions { display: none; }
+  .compare { margin-top: 0; }
+  .top-bar { padding: 8px 16px; min-height: 56px; }
+  .top-bar .meta { display: none; }
+  .top-actions .btn-label { display: none; }
+  .top-actions > button { padding: 8px 12px; min-width: 44px; justify-content: center; }
 }
