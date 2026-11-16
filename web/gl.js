@@ -206,10 +206,7 @@ void main() {
   vec2 q = (v_uv - 0.5) * vec2(uAspect, 1.0) / (0.5 * length(vec2(uAspect, 1.0)));
   c *= 1.0 - uVignette * 0.8 * smoothstep(0.35, 1.05, length(q));
 
-  // Halation: a deeper, stronger red glow, and a pull of green and blue out
-  // of the glow so the red still shows over bright, misted highlights.
-  c = screen(c, min(halo * uHalation * 1.5 * vec3(1.0, 0.3, 0.12), vec3(1.0)));
-  c.gb *= 1.0 - hr * vec2(0.22, 0.3);
+  c = screen(c, halo * uHalation * vec3(1.0, 0.36, 0.16));
 
   if (uMode > 0) {
     vec3 L = uMode == 1 ? generatedLeak(v_uv)
