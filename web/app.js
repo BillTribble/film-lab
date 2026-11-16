@@ -494,6 +494,9 @@ function syncControls() {
   const artInfo = $("#art-info");
   if (artInfo) artInfo.textContent = (s.artMode === "scans" && !app.dustSources.length) ? "No dust scans added yet." : "";
   const leaksOn = s.leakMode !== "off";
+  // Follow the light places a generated leak against the brightest part of the
+  // frame; a scanned leak is just an overlay, so the switch means nothing there.
+  $("#aware-row").hidden = s.leakMode !== "generated" && s.leakMode !== "mix";
   document.querySelectorAll('[data-action="reroll"], [data-action="reroll-all"]').forEach((b) => { b.disabled = !leaksOn; });
   document.querySelectorAll('[data-action="undo"]').forEach((b) => { b.disabled = !app.undo.length; });
   $("#real-tools").hidden = s.leakMode !== "real" && s.leakMode !== "mix";
