@@ -89,8 +89,7 @@ function peakLuminance(img, maxSide) {
 
 /**
  * Mist (Black Pro-Mist style) bloom map: highlights in their own colour,
- * spread by a tight and a very wide glow. Starts lower than halation, since
- * a mist filter softens bright midtones too, not just light sources.
+ * spread by a tight and a very wide glow.
  */
 export function bloomMap(peak) {
   const { w, h, data, rgb, avg } = peak;
@@ -101,7 +100,7 @@ export function bloomMap(peak) {
     // Large bright areas bloom by their average light (soft); small point
     // lights add a little extra from their peak so they still sparkle.
     const la = 0.299 * avg[i * 3] + 0.587 * avg[i * 3 + 1] + 0.114 * avg[i * 3 + 2];
-    const ka = ss(0.62, 1.0, la), kp = ss(0.85, 1.0, data[i]) * 0.35;
+    const ka = ss(0.45, 1.0, la), kp = ss(0.8, 1.0, data[i]) * 0.5;
     for (let c = 0; c < 3; c++) ch[c][i] = avg[i * 3 + c] * ka + rgb[i * 3 + c] * kp;
   }
   const blur = (src, r) => {
@@ -114,7 +113,9 @@ export function bloomMap(peak) {
   const tight = ch.map((c) => blur(c, rt));
   const wide = ch.map((c) => blur(c, rw));
   for (let i = 0; i < w * h; i++) {
-    for (let c = 0; c < 3; c++) d.data[i * 4 + c] = Math.min(1, tight[c][i] * 0.6 + wide[c][i] * 1.7) * 255;
+    // A true spread of the highlights (weights sum to 1, no gain): the shader
+    // scatters a share of this light, it never adds more than was there.
+    for (let c = 0; c < 3; c++) d.data[i * 4 + c] = Math.min(1, tight[c][i] * 0.4 + wide[c][i] * 0.6) * 255;
     d.data[i * 4 + 3] = 255;
   }
   return d;

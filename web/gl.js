@@ -192,15 +192,26 @@ void main() {
   float halo = texture(uHalo, v_uv).r;
   float hr = clamp(halo * uHalation * 2.0, 0.0, 1.0);
 
+  // Like the real filter, mist MOVES light rather than adding it: highlights
+  // give up a share of their light (up to 30% at full) and it lands spread
+  // around them, so nothing can be pushed to white. A higher setting also
+  // spreads the glow wider, the way heavier grades do.
   if (uMist > 0.0) {
-    // The slider runs to 4x the original strength: 25% is the old 100%.
-    float m = uMist * 4.0;
+    float k = 0.3 * uMist;
+    vec2 rad = vec2(1.0 / uAspect, 1.0) * 0.03 * uMist;
+    vec3 glow = texture(uBloom, v_uv).rgb;
+    for (int i = 0; i < 8; i++) {
+      float a = float(i) * 0.785398;
+      glow += texture(uBloom, v_uv + vec2(cos(a), sin(a)) * rad).rgb;
+    }
+    glow /= 9.0;
     // A slightly warm glow, turning red where halation is, so the mist
-    // carries the halation's red instead of washing it out to white.
-    vec3 tint = mix(vec3(1.0, 0.9, 0.8), vec3(1.0, 0.5, 0.3), hr);
-    vec3 bloom = texture(uBloom, v_uv).rgb * tint;
-    c = screen(c, min(bloom * m, vec3(1.0)));
-    c = mix(c, c * 0.93 + 0.035 * smoothstep(0.05, 0.4, c), min(1.0, m * 0.5));
+    // carries the halation's red instead of washing it out.
+    glow *= mix(vec3(1.0, 0.92, 0.84), vec3(1.0, 0.55, 0.35), hr);
+    vec3 hl = c * smoothstep(0.45, 1.0, dot(c, vec3(0.299, 0.587, 0.114)));
+    c = max(c - k * hl, 0.0) + k * glow * 5.0; // the spread glow is thin; this restores its energy
+    // Highlights and midtones lose a little contrast; blacks stay put.
+    c = mix(c, c * 0.93 + 0.035 * smoothstep(0.05, 0.4, c), uMist * 0.6);
   }
 
   vec2 q = (v_uv - 0.5) * vec2(uAspect, 1.0) / (0.5 * length(vec2(uAspect, 1.0)));

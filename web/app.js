@@ -15,7 +15,7 @@ const STATE_VERSION = 3;
 // The default look. Everything here is what a first run starts from.
 const DEFAULTS = {
   stock: "kodachrome64",
-  strength: 0.85,
+  strength: 1,
   halation: 0.37,
   mist: 0.88,
   vignette: 0.18,
