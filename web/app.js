@@ -10,7 +10,7 @@ const $ = (sel) => document.querySelector(sel);
 
 // Bump when the default look changes: a saved look from an older build would
 // otherwise override the new defaults and the app would open unchanged.
-const STATE_VERSION = 2;
+const STATE_VERSION = 3;
 
 // The default look. Everything here is what a first run starts from.
 const DEFAULTS = {
@@ -26,7 +26,7 @@ const DEFAULTS = {
   leakMode: "generated", // off | generated | real | mix
   leakAmt: 1.0,
   aware: true,
-  artMode: "generated", // off | generated | scans | mix
+  artMode: "off", // off | generated | scans | mix — artifacts are opt-in
   artifacts: { dust: true, scratches: true, hairs: false, spots: false },
   artifactAmt: 0.35,
 };
