@@ -1,6 +1,6 @@
 import { FilmRenderer } from "./gl.js";
 import { analyseLight, generatedLeak, hashSeed, newSeed, realLeak, rng } from "./leaks.js";
-import { STOCKS, decodeFull, decodeThumb, haloMask, loadGrain, loadLut } from "./pipeline.js";
+import { GRAINS, STOCKS, decodeFull, decodeThumb, haloMask, loadGrain, loadLut } from "./pipeline.js";
 import { extractExif, withExif } from "./exif.js";
 import * as src from "./sources.js";
 
@@ -13,6 +13,7 @@ const DEFAULTS = {
   halation: 0.25,
   vignette: 0.3,
   grain: 0.35,
+  grainType: "tmax400",
   leakMode: "generated", // off | generated | real | mix
   leakAmt: 1.0,
   aware: true,
@@ -91,6 +92,15 @@ async function bindStock(r) {
   if (r.lutKey !== app.settings.stock) r.setLut(app.settings.stock, await loadLut(app.settings.stock));
 }
 
+async function bindGrain(r) {
+  const key = app.settings.grainType;
+  if (r.grainKey === key) return;
+  const tile = await loadGrain(key);
+  if (app.settings.grainType !== key) return; // changed again while loading
+  r.setGrain(tile);
+  r.grainKey = key;
+}
+
 function seedFor(photo, mode) {
   const s = (app.seeds[photo.name] ||= {});
   if (s[mode] === undefined) s[mode] = hashSeed(`${photo.name}:${mode}`);
@@ -126,12 +136,12 @@ async function leakFor(r, photo) {
 
 function params(photo, leak, { grain = true } = {}) {
   const s = app.settings;
-  const g = STOCKS[s.stock].grain;
+  const g = GRAINS[s.grainType];
   return {
     aspect: photo.width / photo.height,
     imageWidth: photo.width, imageHeight: photo.height,
     strength: s.strength, halation: s.halation, vignette: s.vignette,
-    grain: grain ? s.grain * g.amount : 0, grainSize: g.size, grainChroma: g.chroma,
+    grain: grain ? s.grain * g.amount : 0, grainSize: g.size, grainChroma: STOCKS[s.stock].chroma,
     before: app.before, leak,
   };
 }
@@ -149,6 +159,7 @@ function requestRender() {
     try {
       await prepare(photo);
       await bindStock(view);
+      await bindGrain(view);
       // Show the thumbnail-resolution render at once, then swap in full resolution.
       if (view.photoId !== photo.id) {
         view.setImage("orig", photo.thumb);
@@ -292,19 +303,29 @@ function syncEmpty() {
   ["#export-one", "#export-all"].forEach((id) => { $(id).disabled = empty; });
 }
 
-function renderStocks() {
-  $("#stocks").replaceChildren(...Object.entries(STOCKS).map(([key, s]) => {
-    const b = document.createElement("button");
-    b.setAttribute("role", "tab");
-    b.dataset.stock = key;
-    b.textContent = s.label;
-    return b;
-  }));
+// Film and grain steppers: ‹ value ›, wrapping from last to first and back.
+const STEPPERS = { stock: { options: STOCKS, setting: "stock" }, grain: { options: GRAINS, setting: "grainType" } };
+
+function step(name, dir) {
+  const { options, setting } = STEPPERS[name];
+  const keys = Object.keys(options);
+  const i = keys.indexOf(app.settings[setting]);
+  app.settings[setting] = keys[(i + dir + keys.length) % keys.length];
+  syncControls(); // label updates at once; the render follows
+  persist();
+  requestRender();
 }
 
 function syncControls() {
   const s = app.settings;
-  document.querySelectorAll("[data-stock]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.stock === s.stock)));
+  document.querySelectorAll("[data-stepper]").forEach((el) => {
+    const { options, setting } = STEPPERS[el.dataset.stepper];
+    const opt = options[s[setting]];
+    const value = el.querySelector(".stepper-value");
+    if (!value || !opt) return;
+    value.textContent = opt.label;
+    value.title = opt.full || opt.label;
+  });
   document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === s.leakMode)));
   document.querySelectorAll("input[data-setting]").forEach((inp) => {
     const v = s[inp.dataset.setting];
@@ -357,7 +378,7 @@ async function exportPhotos(list) {
   const off = new FilmRenderer(document.createElement("canvas"));
   let last = "";
   try {
-    off.setGrain(await loadGrain());
+    await bindGrain(off);
     await bindStock(off);
     for (const [n, photo] of list.entries()) {
       setStatus(`Exporting ${n + 1} of ${list.length}`);
@@ -387,13 +408,11 @@ function bindEvents() {
     const b = e.target.closest(".thumb");
     if (b) select(Number(b.dataset.index));
   });
-  $("#stocks").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-stock]");
-    if (!b) return;
-    app.settings.stock = b.dataset.stock;
-    syncControls();
-    persist();
-    requestRender();
+  document.querySelectorAll("[data-stepper]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-step]");
+      if (b) step(el.dataset.stepper, Number(b.dataset.step));
+    });
   });
   $("#leak-mode").addEventListener("click", (e) => {
     const b = e.target.closest("[data-mode]");
@@ -470,12 +489,11 @@ async function init() {
   const state = await src.loadState();
   Object.assign(app.settings, state.settings || {});
   if (!STOCKS[app.settings.stock]) app.settings.stock = DEFAULTS.stock;
+  if (!GRAINS[app.settings.grainType]) app.settings.grainType = DEFAULTS.grainType;
   app.seeds = state.seeds || {};
   $("#folder-label").textContent = local?.inDir ? `${local.photos.length} photos from ${local.inDir}` : "";
-  renderStocks();
   syncControls();
   bindEvents();
-  loadGrain().then((g) => { view.setGrain(g); requestRender(); });
   window.__APP_LOADED__ = true;
   window.filmLab = app; // for debugging from the console
   if (local) {

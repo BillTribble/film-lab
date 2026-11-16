@@ -1,14 +1,22 @@
 // Browser-side image pipeline: decode (EXIF-upright), thumbnails, halation
 // mask, film-stock cubes and the grain tile. No server needed.
 
+// Film stocks set the colour; `chroma` is how much the grain shows as colour
+// dye clouds rather than mono silver grain.
 export const STOCKS = {
-  // grain: size < 1 is finer, amount scales the Grain slider, chroma = colour
-  // (dye-cloud) grain. Relative values follow published RMS granularity:
-  // Provia 100F finest, Kodachrome 64 the crispest and most visible.
-  kodachrome64: { label: "Kodachrome 64", grain: { size: 1.0, amount: 1.0, chroma: 0.18 } },
-  velvia50: { label: "Velvia 50", grain: { size: 0.85, amount: 0.8, chroma: 0.22 } },
-  ektachrome100vs: { label: "Ektachrome 100VS", grain: { size: 0.85, amount: 0.8, chroma: 0.28 } },
-  provia100f: { label: "Provia 100F", grain: { size: 0.75, amount: 0.65, chroma: 0.15 } },
+  kodachrome64: { label: "Kodachrome", full: "Kodachrome 64", chroma: 0.18 },
+  velvia50: { label: "Velvia 50", full: "Fujichrome Velvia 50", chroma: 0.22 },
+  ektachrome100vs: { label: "Ektachrome", full: "Ektachrome 100VS", chroma: 0.28 },
+  provia100f: { label: "Provia 100F", full: "Fujichrome Provia 100F", chroma: 0.15 },
+};
+
+// Scanned grain samples (G'MIC), fine to coarse. size > 1 is coarser;
+// amount scales the Grain slider.
+export const GRAINS = {
+  tmax400: { label: "T-Max 400", size: 1.0, amount: 0.8 },
+  orwo_np20: { label: "Orwo NP20", size: 1.15, amount: 0.9 },
+  trix1600: { label: "Tri-X 1600", size: 1.4, amount: 1.1 },
+  tmax3200: { label: "T-Max 3200", size: 1.8, amount: 1.35 },
 };
 
 const LUT_N = 64;
@@ -101,8 +109,8 @@ export function loadLut(key) {
   return lutCache.get(key);
 }
 
-let grainPromise;
-export function loadGrain() {
-  grainPromise ||= loadBitmap("assets/grain.png");
-  return grainPromise;
+const grainCache = new Map();
+export function loadGrain(key) {
+  if (!grainCache.has(key)) grainCache.set(key, loadBitmap(`assets/grain/${key}.png`));
+  return grainCache.get(key);
 }

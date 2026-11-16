@@ -10,8 +10,9 @@ photos. Everything runs in your browser, and photos never leave your device.
 
 - **Four slide stocks:** Kodachrome 64, Velvia 50, Ektachrome 100VS and Provia 100F,
   with a strength slider.
-- **Grain per stock:** real scanned grain, sized and coloured to suit each stock.
-  Provia is finest, Kodachrome is crispest.
+- **Four scanned grains:** T-Max 400, Orwo NP20, Tri-X 1600 and T-Max 3200, from
+  fine to coarse. Pick a film and a grain with the ‹ › steppers. The film sets how
+  much the grain shows as colour dye clouds.
 - **Light leaks:** Off, Generated, Scans (your own leak images) or Mix. Re-roll one
   photo or all of them, and undo with ⌘Z.
 - **Follow the light:** leaks come in from the edge nearest the brightest part of the
@@ -59,5 +60,5 @@ python3 tools/build_assets.py
 - Code: MIT (see `LICENSE`).
 - `web/assets/luts/`: film emulation CLUTs from G'MIC's collection, derived from the
   RawTherapee film simulation set by Pat David and contributors, CC BY-SA 4.0.
-- `web/assets/grain.png`: rendered from G'MIC's scanned grain samples
+- `web/assets/grain/`: rendered from G'MIC's scanned grain samples
   (G'MIC by David Tschumperlé / GREYC, CeCILL).

@@ -8,8 +8,10 @@ Writes:
   web/assets/luts/<stock>.png  64x64x64 film-stock colour cube, packed as an
                                8x8 grid of 64x64 tiles (tile index = blue,
                                x = red, y = green)
-  web/assets/grain.png         2048x2048 scanned film grain (Kodak TMax 400
-                               sample), centred on 128 = no change
+  web/assets/grain/<key>.png   2048x2048 scanned film grain, one per G'MIC
+                               grain sample, centred on 128 = no change and
+                               normalised to the same contrast (the app
+                               sets each grain's strength)
 """
 
 from __future__ import annotations
@@ -33,8 +35,16 @@ STOCKS = {
     "ektachrome100vs": "kodak_ektachrome_100_vs",
     "provia100f": "fuji_provia_100f",
 }
+# key -> G'MIC scanned grain sample (gmic_grain.gmz)
+GRAINS = {
+    "tmax400": "kodak_tmax400",
+    "orwo_np20": "orwo_np20",
+    "trix1600": "kodak_trix1600",
+    "tmax3200": "kodak_tmax3200",
+}
 N = 64
 GRAIN_PX = 2048
+GRAIN_STD = 28.0  # target standard deviation (0-255 scale)
 
 
 def gmic(cwd: Path, *args: str) -> None:
@@ -55,24 +65,28 @@ def build_lut(tmp: Path, key: str, name: str) -> None:
     print("wrote", out.relative_to(ROOT))
 
 
-def build_grain(tmp: Path) -> None:
+def build_grain(tmp: Path, key: str, sample: str) -> None:
     gmic(
         tmp, f"{GRAIN_PX},{GRAIN_PX},1,1,128",
-        "__fx_simulate_grain", "kodak_tmax400,1,1,100,0,0,0,0,0,0,0,0,1",
-        "sub", "{ia}", "add", "128", "c", "0,255", "o", "grain.png",
+        "__fx_simulate_grain", f"{sample},1,1,100,0,0,0,0,0,0,0,0,1",
+        "o", f"{key}.png",
     )
-    out = ASSETS / "grain.png"
-    Image.open(tmp / "grain.png").convert("L").save(out, optimize=True)
+    g = np.asarray(Image.open(tmp / f"{key}.png").convert("L"), dtype=np.float32)
+    g = (g - g.mean()) * (GRAIN_STD / max(g.std(), 1e-3)) + 128.0
+    out = ASSETS / "grain" / f"{key}.png"
+    Image.fromarray(np.clip(np.rint(g), 0, 255).astype(np.uint8)).save(out, optimize=True)
     print("wrote", out.relative_to(ROOT))
 
 
 def main() -> None:
     (ASSETS / "luts").mkdir(parents=True, exist_ok=True)
+    (ASSETS / "grain").mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as t:
         tmp = Path(t)
         for key, name in STOCKS.items():
             build_lut(tmp, key, name)
-        build_grain(tmp)
+        for key, sample in GRAINS.items():
+            build_grain(tmp, key, sample)
 
 
 if __name__ == "__main__":
