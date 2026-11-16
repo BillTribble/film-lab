@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,6 +14,20 @@
   <link rel="stylesheet" href="gm3-color-tokens.css">
   <link rel="stylesheet" href="styles.css">
   <script>
+    // Theme first, so the page never flashes the wrong colours.
+    document.documentElement.dataset.theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+
+    // Opened straight from disk (file://)? Browsers block the app's modules and
+    // assets there, so say how to open it instead of showing a broken page.
+    window.__FILE_MODE__ = location.protocol === "file:";
+    if (window.__FILE_MODE__) {
+      document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("file-notice").hidden = false;
+        document.querySelector(".shell").hidden = true;
+        document.querySelector(".top-actions").hidden = true;
+      });
+    }
+
     // Error overlay + boot watchdog: paint failures instead of a blank page.
     window.__showError = (msg) => {
       const el = document.getElementById("error-overlay");
@@ -24,7 +38,7 @@
     window.addEventListener("error", (e) => window.__showError(e.message));
     window.addEventListener("unhandledrejection", (e) => window.__showError(e.reason && (e.reason.stack || e.reason)));
     window.addEventListener("load", () => setTimeout(() => {
-      if (!window.__APP_LOADED__) window.__showError("App script did not finish loading.");
+      if (!window.__APP_LOADED__ && !window.__FILE_MODE__) window.__showError("App script did not finish loading.");
     }, 1500));
   </script>
 </head>
@@ -38,6 +52,14 @@
       <button class="btn" id="export-all" aria-label="Export all"><span class="material-symbols-outlined">download_for_offline</span><span class="btn-label">Export all</span></button>
     </div>
   </header>
+
+  <section class="file-notice" id="file-notice" hidden>
+    <h2 class="section-title">Open Film lab in a browser tab, not from the file</h2>
+    <p>Browsers block apps like this when the page is opened straight from disk.</p>
+    <a class="btn" href="https://billtribble.github.io/film-lab/"><span class="material-symbols-outlined">open_in_new</span>Open the online version</a>
+    <p>Or run it locally: double-click <strong>Film Lab.command</strong> in the project folder, or run</p>
+    <pre class="file-notice-cmd">python3 server.py</pre>
+  </section>
 
   <main class="shell">
     <nav class="pane strip" id="strip" aria-label="Photos"></nav>

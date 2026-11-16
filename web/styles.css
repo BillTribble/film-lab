@@ -254,6 +254,29 @@ body.dragging .stage { box-shadow: inset 0 0 0 3px var(--md-sys-color-primary); 
 
 .quick-roll { display: none; }
 
+/* ---- shown only when index.html is opened from disk ---- */
+.file-notice {
+  max-width: 640px;
+  margin: 24px auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  border-radius: 16px;
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface);
+}
+.file-notice p { margin: 0; color: var(--md-sys-color-on-surface-variant); }
+.file-notice .btn { text-decoration: none; }
+.file-notice-cmd {
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--md-sys-color-surface-container-highest);
+  font-size: 13px;
+}
+
 /* ---- film / grain steppers: ‹ value › ---- */
 .stepper-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .stepper { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
