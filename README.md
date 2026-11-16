@@ -52,6 +52,11 @@ The look is one WebGL2 shader: film-stock colour cube → vignette → halation 
 leak → grain → artifacts. Grain goes after the leak, because a leak exposes the film.
 Dust and scratches sit on top, as on a scanned slide.
 
+The grain tile is sampled without mipmaps. A preview shows a 24-megapixel photo at a
+fraction of its pixel size, and mip filtering averages random noise down to flat grey —
+the grain then only appeared in a full-resolution export. Linear sampling keeps its
+contrast at any zoom.
+
 The colour cubes and grain tiles are pre-built with [G'MIC](https://gmic.eu):
 
 ```bash

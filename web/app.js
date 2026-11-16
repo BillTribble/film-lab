@@ -5,18 +5,23 @@ import { extractExif, withExif } from "./exif.js";
 import { ARTIFACT_KINDS, anyArtifacts, artifactParams } from "./artifacts.js";
 import * as src from "./sources.js";
 
-const APP_BUILD = "2026-11-16b";
+const APP_BUILD = "2026-11-16c";
 const $ = (sel) => document.querySelector(sel);
 
+// Bump when the default look changes: a saved look from an older build would
+// otherwise override the new defaults and the app would open unchanged.
+const STATE_VERSION = 2;
+
+// The default look. Everything here is what a first run starts from.
 const DEFAULTS = {
   stock: "kodachrome64",
   strength: 0.85,
-  halation: 0.25,
-  mist: 0,
-  vignette: 0.3,
-  grain: 0.35,
-  grainType: "kodachrome64",
-  matchGrain: true,   // grain follows the film stock
+  halation: 0.37,
+  mist: 0.88,
+  vignette: 0.18,
+  grain: 1.0,
+  grainType: "provia100f", // finest grain, so the Grain slider is what decides
+  matchGrain: false,  // pick the grain yourself rather than following the film
   extraGrains: false, // also offer the black-and-white grain scans
   leakMode: "generated", // off | generated | real | mix
   leakAmt: 1.0,
@@ -343,7 +348,7 @@ function toast(text) {
 let saveTimer;
 function persist() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => src.saveState({ settings: app.settings, seeds: app.seeds }), 400);
+  saveTimer = setTimeout(() => src.saveState({ version: STATE_VERSION, settings: app.settings, seeds: app.seeds }), 400);
 }
 
 function renderStrip() {
@@ -692,6 +697,10 @@ async function init() {
   thumbs.setGrain(null);
   const local = await src.detectLocal();
   const state = await src.loadState();
+  // An older build's saved look is dropped when the defaults change, so the
+  // app opens on the current default look instead of the previous one. Leak
+  // seeds and re-rolls are kept; only the look itself is refreshed.
+  if ((state.version || 0) < STATE_VERSION) state.settings = null;
   Object.assign(app.settings, state.settings || {});
   app.settings.artifacts = { ...DEFAULTS.artifacts, ...(state.settings?.artifacts || {}) };
   // The public site has generated leaks and artifacts only (scan packs can't be

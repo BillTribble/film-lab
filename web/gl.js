@@ -261,15 +261,15 @@ export class FilmRenderer {
     return p;
   }
 
-  _texture(source, wrap) {
+  _texture(source, wrap, { mip = true } = {}) {
     const gl = this.gl;
     const t = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, t);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    if (mip) gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mip ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     const w = wrap || gl.CLAMP_TO_EDGE;
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, w);
@@ -288,11 +288,19 @@ export class FilmRenderer {
     this.tex[slot] = img ? this._texture(img) : this.black;
   }
 
-  /** Grain tile, repeated across the frame at 1 image pixel = 1 grain pixel. */
+  /**
+   * Grain tile, repeated across the frame at 1 image pixel = 1 grain pixel.
+   * No mipmaps: a fit-to-window preview shows the photo at a fraction of its
+   * own pixel size, so the tile is minified heavily, and mip filtering averages
+   * random noise to flat grey — which is why the grain disappeared on screen
+   * (it survived only in a full-resolution export). Plain linear sampling keeps
+   * the noise's contrast at every zoom, trading a little aliasing for grain you
+   * can actually see.
+   */
   setGrain(img) {
     this._release("grain");
     if (!img) { this.tex.grain = this.grey; return; }
-    this.tex.grain = this._texture(img, this.gl.MIRRORED_REPEAT);
+    this.tex.grain = this._texture(img, this.gl.MIRRORED_REPEAT, { mip: false });
     this.grainSize = [img.width, img.height];
   }
 
