@@ -36,6 +36,14 @@ export function leaksFromServer() {
   }));
 }
 
+export function dustFromServer() {
+  return (local?.dust || []).map((name) => ({
+    id: `srv:dust:${name}`,
+    name,
+    getBlob: () => fetch(`api/dust/${encodeURIComponent(name)}`).then((r) => r.blob()),
+  }));
+}
+
 const isImage = (f) => /^image\/(jpeg|png|webp)$/.test(f.type) || /\.(jpe?g|png|webp)$/i.test(f.name);
 
 export function fromFiles(files) {

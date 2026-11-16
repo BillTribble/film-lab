@@ -143,10 +143,29 @@
           <button class="btn-outlined" data-action="undo" title="Undo re-roll (⌘Z)"><span class="material-symbols-outlined">undo</span>Undo</button>
         </div>
         <div class="button-row" id="real-tools" hidden>
-          <button class="btn-outlined" data-pick="leak-input"><span class="material-symbols-outlined">add</span>Add leak scans</button>
-          <a class="btn-text" id="leak-pack-link" href="https://blog.spoongraphics.co.uk/freebies/download-my-free-light-leaks-photo-overlays-to-add-retro-effects-to-your-photos" target="_blank" rel="noopener">Free leak pack<span class="material-symbols-outlined">open_in_new</span></a>
-        </div>
+          <button class="btn-outlined" data-pick="leak-input"><span class="material-symbols-outlined">add</span>Add leak scans</button>        </div>
         <p class="meta" id="leak-info"></p>
+      </section>
+
+      <section class="group">
+        <h2 class="section-title">Artifacts</h2>
+        <div class="m3-pill-tabs gm3-connected-dsp" id="art-mode" role="tablist">
+          <button role="tab" data-art-mode="off">Off</button>
+          <button role="tab" data-art-mode="generated">Generated</button>
+          <button role="tab" data-art-mode="scans">Scans</button>
+          <button role="tab" data-art-mode="mix">Mix</button>
+        </div>
+        <div class="chip-row" id="artifact-kinds"></div>
+        <div class="button-row" id="dust-tools" hidden>
+          <button class="btn-outlined" data-pick="dust-input"><span class="material-symbols-outlined">add</span>Add dust scans</button>        </div>
+        <label class="slider-row"><span>Amount</span><output></output>
+          <input type="range" data-setting="artifactAmt" min="0" max="1" step="0.01"></label>
+        <div class="button-row">
+          <button class="btn-tonal" data-action="reroll-art"><span class="material-symbols-outlined">casino</span>Re-roll</button>
+          <button class="btn-outlined" data-action="reroll-art-all"><span class="material-symbols-outlined">casino</span>Re-roll all</button>
+          <button class="btn-outlined" data-action="undo" title="Undo re-roll (⌘Z)"><span class="material-symbols-outlined">undo</span>Undo</button>
+        </div>
+        <p class="meta" id="art-info"></p>
       </section>
 
       <button class="btn-outlined compare" id="compare"><span class="material-symbols-outlined">compare</span>Hold to compare</button>
@@ -155,6 +174,7 @@
 
   <input type="file" id="photo-input" accept="image/jpeg,image/png,image/webp" multiple hidden>
   <input type="file" id="leak-input" accept="image/jpeg,image/png,image/webp" multiple hidden>
+  <input type="file" id="dust-input" accept="image/jpeg,image/png,image/webp" multiple hidden>
   <ul class="menu" id="menu" role="menu" hidden></ul>
   <div class="toast" id="toast" hidden></div>
   <div class="error-overlay" id="error-overlay" hidden>

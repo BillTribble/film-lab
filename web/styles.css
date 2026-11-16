@@ -254,6 +254,42 @@ body.dragging .stage { box-shadow: inset 0 0 0 3px var(--md-sys-color-primary); 
 
 .quick-roll { display: none; }
 
+/* Public site: generated leaks and artifacts only. */
+body.online [data-mode="real"], body.online [data-mode="mix"],
+body.online [data-art-mode="scans"], body.online [data-art-mode="mix"],
+body.online #real-tools, body.online #dust-tools { display: none !important; }
+body.online [data-mode="generated"]:not([aria-selected="true"]),
+body.online [data-art-mode="generated"]:not([aria-selected="true"]) { border-radius: 4px 9999px 9999px 4px; }
+
+/* ---- toggle chips (artifact kinds) ---- */
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font: 500 13px/1 var(--md-ref-typeface-plain);
+  background-color: var(--md-sys-color-surface-container-lowest);
+  box-shadow: inset 0 0 0 1px var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface);
+  transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+.chip[aria-pressed="true"] {
+  background-color: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  box-shadow: none;
+}
+.chip[aria-pressed="true"]::before {
+  content: "check";
+  font-family: 'Material Symbols Outlined';
+  font-feature-settings: 'liga';
+  font-size: 16px;
+}
+
 .stepper.locked .stepper-control { opacity: 0.5; }
 .stepper.locked button { cursor: default; }
 .stepper-control > button:disabled { opacity: 1; } /* dim the group once, not each button */

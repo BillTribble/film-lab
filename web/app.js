@@ -2,6 +2,7 @@ import { FilmRenderer } from "./gl.js";
 import { analyseLight, generatedLeak, hashSeed, newSeed, realLeak, rng } from "./leaks.js";
 import { GRAINS, STOCKS, decodeFull, decodeThumb, haloMask, loadGrain, loadLut } from "./pipeline.js";
 import { extractExif, withExif } from "./exif.js";
+import { ARTIFACT_KINDS, anyArtifacts, artifactParams } from "./artifacts.js";
 import * as src from "./sources.js";
 
 const APP_BUILD = "2026-11-16b";
@@ -19,6 +20,9 @@ const DEFAULTS = {
   leakMode: "generated", // off | generated | real | mix
   leakAmt: 1.0,
   aware: true,
+  artMode: "generated", // off | generated | scans | mix
+  artifacts: { dust: true, scratches: true, hairs: false, spots: false },
+  artifactAmt: 0.35,
 };
 const TYPE_NAMES = ["Glow", "Streak", "Wash"];
 const EDGE_NAMES = ["left", "right", "top", "bottom"];
@@ -27,6 +31,8 @@ const LEAK_PACK_URL = "https://blog.spoongraphics.co.uk/freebies/download-my-fre
 const app = {
   photos: [],        // {id, name, getBlob, thumb, halo, light, width, height, ready}
   leakSources: [],   // {id, name, getBlob}
+  dustSources: [],   // artifact scans (dust / scratches), same shape
+  dust: [],          // decoded artifact scans
   leaks: [],         // decoded scans: {name, img, width, height, light}
   settings: { ...DEFAULTS },
   seeds: {},         // photo name -> {generated, real}
@@ -73,21 +79,35 @@ async function addPhotos(list) {
   scheduleThumbs();
 }
 
-async function ensureLeakLibrary() {
-  const have = new Set(app.leaks.map((l) => l.name));
-  const todo = app.leakSources.filter((s) => !have.has(s.name));
-  if (!todo.length) return;
-  setStatus("Loading leak scans…");
-  for (const s of todo) {
-    const blob = await s.getBlob();
-    const full = await createImageBitmap(blob);
-    const k = Math.min(1, 2048 / Math.max(full.width, full.height));
-    const img = await createImageBitmap(full, { resizeWidth: Math.round(full.width * k), resizeHeight: Math.round(full.height * k), resizeQuality: "high" });
-    full.close();
-    app.leaks.push({ name: s.name, img, width: img.width, height: img.height, light: analyseLight(img) });
-  }
-  setStatus("");
+/**
+ * Decode any not-yet-loaded scans from `sources` into `into` (capped at maxPx).
+ * Concurrent callers (main view, thumbnails, export) share one load.
+ */
+const scanLoads = new Map();
+function loadScans(sources, into, maxPx, label) {
+  const pending = scanLoads.get(into);
+  if (pending) return pending.then(() => loadScans(sources, into, maxPx, label));
+  const have = new Set(into.map((l) => l.name));
+  const todo = sources.filter((s) => !have.has(s.name));
+  if (!todo.length) return Promise.resolve();
+  const job = (async () => {
+    setStatus(`Loading ${label}…`);
+    for (const s of todo) {
+      const full = await createImageBitmap(await s.getBlob());
+      const k = Math.min(1, maxPx / Math.max(full.width, full.height));
+      const img = await createImageBitmap(full, { resizeWidth: Math.round(full.width * k), resizeHeight: Math.round(full.height * k), resizeQuality: "high" });
+      full.close();
+      into.push({ name: s.name, img, width: img.width, height: img.height, light: analyseLight(img) });
+    }
+    setStatus("");
+  })().finally(() => scanLoads.delete(into));
+  scanLoads.set(into, job);
+  return job;
 }
+
+const ensureLeakLibrary = () => loadScans(app.leakSources, app.leaks, 2048, "leak scans");
+// Dust specks are tiny, so dust scans keep more resolution.
+const ensureDustLibrary = () => loadScans(app.dustSources, app.dust, 4096, "dust scans");
 
 // ---------- look ----------
 async function bindStock(r) {
@@ -142,7 +162,41 @@ async function leakFor(r, photo) {
   return { ...L, amount: L.intensity * leakAmt, bleed: aware };
 }
 
-function params(photo, leak, { grain = true } = {}) {
+/**
+ * Artifacts for a photo: generated marks, a scanned overlay, or (Mix) either,
+ * decided by the photo's artifact seed. Binds the scan texture on `r`.
+ */
+async function artifactsFor(r, photo) {
+  const s = app.settings;
+  const aspect = photo.width / photo.height;
+  if (s.artMode === "off") return null;
+  let seed = seedFor(photo, "artifacts");
+  let kind = s.artMode;
+  if (kind === "mix" || kind === "scans") await ensureDustLibrary();
+  if (kind === "mix") {
+    const pick = rng(seed);
+    kind = app.dust.length && pick() < 0.5 ? "scans" : "generated";
+    seed = Math.floor(pick() * 2 ** 32);
+  }
+  if (kind === "generated") {
+    return anyArtifacts(s.artifacts) ? { generated: artifactParams(seed, s.artifacts, s.artifactAmt, aspect) } : null;
+  }
+  if (!app.dust.length) return null;
+  // Same random scan / orientation / crop as real leaks, without light-following.
+  const L = realLeak(seed, app.dust, null, false, aspect);
+  const scan = app.dust.find((d) => d.name === L.name);
+  if (r.dustName !== L.name) { r.setImage("dust", scan.img); r.dustName = L.name; }
+  return {
+    scan: {
+      name: L.name,
+      matrix: L.matrix,
+      blend: scan.light.mean < 0.5 ? 1 : 2, // light marks on black: screen; dark on white: multiply
+      amount: Math.min(1, s.artifactAmt * 1.1),
+    },
+  };
+}
+
+function params(photo, leak, { grain = true, art = null } = {}) {
   const s = app.settings;
   const g = GRAINS[currentGrain()];
   return {
@@ -151,6 +205,7 @@ function params(photo, leak, { grain = true } = {}) {
     strength: s.strength, halation: s.halation, vignette: s.vignette,
     grain: grain ? s.grain * g.amount : 0, grainSize: g.size, grainChroma: g.chroma,
     before: app.before, leak,
+    artifacts: art,
   };
 }
 
@@ -183,7 +238,7 @@ function requestRender() {
       }
       sizeCanvas(photo);
       const leak = await leakFor(view, photo);
-      view.render(params(photo, leak));
+      view.render(params(photo, leak, { art: await artifactsFor(view, photo) }));
       describeLeak(leak);
       drawCurrentThumb();
       scheduleThumbs();
@@ -246,7 +301,9 @@ async function renderThumbs() {
     const h = Math.round((w * photo.height) / photo.width);
     thumbs.canvas.width = w;
     thumbs.canvas.height = h;
-    thumbs.render({ ...params(photo, leak, { grain: false }), before: false });
+    const art = await artifactsFor(thumbs, photo);
+    if (run !== thumbRun) return;
+    thumbs.render({ ...params(photo, leak, { grain: false, art }), before: false });
     if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
     cv.getContext("2d").drawImage(thumbs.canvas, 0, 0);
   }
@@ -419,11 +476,18 @@ function syncControls() {
     const out = inp.parentElement.querySelector("output");
     if (out) out.textContent = `${Math.round(v * 100)}%`;
   });
+  document.querySelectorAll("[data-artifact]").forEach((b) => b.setAttribute("aria-pressed", String(!!s.artifacts[b.dataset.artifact])));
+  document.querySelectorAll("[data-art-mode]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.artMode === s.artMode)));
+  const artOn = s.artMode !== "off";
+  document.querySelectorAll('[data-action="reroll-art"], [data-action="reroll-art-all"]').forEach((b) => { b.disabled = !artOn; });
+  $("#artifact-kinds").hidden = s.artMode !== "generated" && s.artMode !== "mix";
+  $("#dust-tools").hidden = s.artMode !== "scans" && s.artMode !== "mix";
+  const artInfo = $("#art-info");
+  if (artInfo) artInfo.textContent = (s.artMode === "scans" && !app.dustSources.length) ? "No dust scans added yet." : "";
   const leaksOn = s.leakMode !== "off";
   document.querySelectorAll('[data-action="reroll"], [data-action="reroll-all"]').forEach((b) => { b.disabled = !leaksOn; });
   document.querySelectorAll('[data-action="undo"]').forEach((b) => { b.disabled = !app.undo.length; });
   $("#real-tools").hidden = s.leakMode !== "real" && s.leakMode !== "mix";
-  $("#leak-pack-link").hidden = src.isLocal();
 }
 
 function select(i) {
@@ -433,9 +497,10 @@ function select(i) {
   requestRender();
 }
 
-function reroll(all) {
-  const mode = app.settings.leakMode;
+/** Re-roll leaks (default) or artifacts ("artifacts") for this photo or all. */
+function reroll(all, mode = app.settings.leakMode) {
   if (mode === "off" || !app.photos.length) return;
+  if (mode === "artifacts" && app.settings.artMode === "off") return;
   const targets = all ? app.photos : [app.photos[app.current]];
   app.undo.push({ mode, prev: targets.map((p) => [p.name, seedFor(p, mode)]) });
   if (app.undo.length > 100) app.undo.shift();
@@ -443,11 +508,12 @@ function reroll(all) {
   afterSeedChange();
 }
 
+/** One undo for every kind of re-roll, newest first. */
 function undoReroll() {
   const step = app.undo.pop();
   if (!step) return;
   step.prev.forEach(([name, seed]) => { (app.seeds[name] ||= {})[step.mode] = seed; });
-  if (app.settings.leakMode !== step.mode) app.settings.leakMode = step.mode;
+  if (step.mode !== "artifacts" && app.settings.leakMode !== step.mode) app.settings.leakMode = step.mode;
   afterSeedChange();
 }
 
@@ -473,7 +539,8 @@ async function exportPhotos(list) {
       off.setImage("orig", full);
       off.setImage("halo", photo.halo);
       const leak = await leakFor(off, photo);
-      const jpeg = await off.exportJpeg(full.width, full.height, { ...params(photo, leak), before: false });
+      const art = await artifactsFor(off, photo);
+      const jpeg = await off.exportJpeg(full.width, full.height, { ...params(photo, leak, { art }), before: false });
       full.close();
       const out = await withExif(jpeg, extractExif(await blob.arrayBuffer()));
       last = await src.saveExport(photo.name, out, `${app.settings.stock}${leak ? "-leak" : ""}`);
@@ -532,7 +599,30 @@ function bindEvents() {
       requestRender();
     });
   });
-  const actions = { reroll: () => reroll(false), "reroll-all": () => reroll(true), undo: undoReroll };
+  const actions = {
+    reroll: () => reroll(false),
+    "reroll-all": () => reroll(true),
+    "reroll-art": () => reroll(false, "artifacts"),
+    "reroll-art-all": () => reroll(true, "artifacts"),
+    undo: undoReroll,
+  };
+  $("#art-mode").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-art-mode]");
+    if (!b) return;
+    app.settings.artMode = b.dataset.artMode;
+    syncControls();
+    persist();
+    requestRender();
+  });
+  $("#artifact-kinds").addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-artifact]");
+    if (!chip) return;
+    const k = chip.dataset.artifact;
+    app.settings.artifacts = { ...app.settings.artifacts, [k]: !app.settings.artifacts[k] };
+    syncControls();
+    persist();
+    requestRender();
+  });
   document.querySelectorAll("[data-action]").forEach((b) => b.addEventListener("click", () => actions[b.dataset.action]?.()));
   $("#export-one").addEventListener("click", run(() => exportPhotos([app.photos[app.current]].filter(Boolean))));
   $("#export-all").addEventListener("click", run(() => exportPhotos(app.photos)));
@@ -550,6 +640,13 @@ function bindEvents() {
   };
   pick($("#photo-input"), (files) => addPhotos(src.fromFiles(files)));
   pick($("#leak-input"), addLeakFiles);
+  pick($("#dust-input"), async (files) => {
+    app.dustSources.push(...src.fromFiles(files));
+    if (app.settings.artMode !== "scans" && app.settings.artMode !== "mix") app.settings.artMode = "scans";
+    syncControls();
+    persist();
+    requestRender();
+  });
   document.querySelectorAll("[data-pick]").forEach((b) => b.addEventListener("click", () => $(`#${b.dataset.pick}`).click()));
   document.addEventListener("dragover", (e) => { e.preventDefault(); document.body.classList.add("dragging"); });
   document.addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("dragging"); });
@@ -570,6 +667,7 @@ function bindEvents() {
     if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); select(app.current + 1); }
     else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); select(app.current - 1); }
     else if (e.key === "r" || e.key === "R") reroll(e.shiftKey);
+    else if (e.key === "d" || e.key === "D") reroll(e.shiftKey, "artifacts");
     else if (e.key === "\\" && !e.repeat) hold(true);
   });
   document.addEventListener("keyup", (e) => { if (e.key === "\\") hold(false); });
@@ -590,6 +688,21 @@ async function init() {
   const local = await src.detectLocal();
   const state = await src.loadState();
   Object.assign(app.settings, state.settings || {});
+  app.settings.artifacts = { ...DEFAULTS.artifacts, ...(state.settings?.artifacts || {}) };
+  // The public site has generated leaks and artifacts only (scan packs can't be
+  // re-hosted); scans and mix are a local-mode extra.
+  document.body.classList.toggle("online", !local);
+  if (!local) {
+    if (app.settings.leakMode === "real" || app.settings.leakMode === "mix") app.settings.leakMode = "generated";
+    if (app.settings.artMode === "scans" || app.settings.artMode === "mix") app.settings.artMode = "generated";
+  }
+  $("#artifact-kinds").replaceChildren(...Object.entries(ARTIFACT_KINDS).map(([key, label]) => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.dataset.artifact = key;
+    b.textContent = label;
+    return b;
+  }));
   if (!STOCKS[app.settings.stock]) app.settings.stock = DEFAULTS.stock;
   if (!GRAINS[app.settings.grainType]) app.settings.grainType = app.settings.stock;
   app.seeds = state.seeds || {};
@@ -600,6 +713,7 @@ async function init() {
   window.filmLab = app; // for debugging from the console
   if (local) {
     app.leakSources = src.leaksFromServer();
+    app.dustSources = src.dustFromServer();
     await addPhotos(src.photosFromServer());
   }
   syncEmpty();

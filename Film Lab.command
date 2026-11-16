@@ -12,8 +12,14 @@ for candidate in "$HOME/Pictures/Light Leaks" "$HOME/Library/CloudStorage/Dropbo
   [ -z "$LEAKS" ] && [ -d "$candidate" ] && LEAKS="$candidate"
 done
 
+DUST="$FILM_LAB_DUST"
+for candidate in "$HOME/Pictures/Film Dust" "$HOME/Library/CloudStorage/Dropbox/Film Dust" "$HOME/Dropbox/Film Dust"; do
+  [ -z "$DUST" ] && [ -d "$candidate" ] && DUST="$candidate"
+done
+
 ARGS=()
 [ -n "$FOLDER" ] && ARGS+=("$FOLDER")
 [ -n "$LEAKS" ] && [ -d "$LEAKS" ] && ARGS+=(--leaks "$LEAKS")
+[ -n "$DUST" ] && [ -d "$DUST" ] && ARGS+=(--dust "$DUST")
 
 exec python3 server.py "${ARGS[@]}"

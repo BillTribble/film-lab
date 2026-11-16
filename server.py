@@ -30,6 +30,7 @@ class Config:
     in_dir: Path
     out_dir: Path
     leak_dir: Path | None
+    dust_dir: Path | None
     state_file: Path
     lock = threading.Lock()
 
@@ -92,6 +93,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({
                 "photos": [{"name": n} for n in _list(Config.in_dir, IMAGE_EXT)],
                 "leaks": _list(Config.leak_dir, LEAK_EXT),
+                "dust": _list(Config.dust_dir, LEAK_EXT),
                 "inDir": str(Config.in_dir) if Config.in_dir else "",
                 "outDir": str(Config.out_dir),
             })
@@ -99,8 +101,8 @@ class Handler(SimpleHTTPRequestHandler):
             with Config.lock:
                 text = Config.state_file.read_text() if Config.state_file.exists() else "{}"
             return self._json(json.loads(text))
-        if len(parts) == 3 and parts[:2] in (["api", "photo"], ["api", "leak"]):
-            folder = Config.in_dir if parts[1] == "photo" else Config.leak_dir
+        if len(parts) == 3 and parts[:2] in (["api", "photo"], ["api", "leak"], ["api", "dust"]):
+            folder = {"photo": Config.in_dir, "leak": Config.leak_dir, "dust": Config.dust_dir}[parts[1]]
             path = _child(folder, parts[2])
             if not path:
                 return self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
@@ -153,6 +155,7 @@ def main():
     ap.add_argument("--in", dest="in_dir", help="same as the folder argument")
     ap.add_argument("--out", dest="out_dir", default=str(Path.home() / "Downloads"), help="where exports go (default: ~/Downloads)")
     ap.add_argument("--leaks", dest="leak_dir", default=os.environ.get("FILM_LAB_LEAKS"), help="folder of light-leak scans")
+    ap.add_argument("--dust", dest="dust_dir", default=os.environ.get("FILM_LAB_DUST"), help="folder of dust / scratch scans")
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8790)))
     ap.add_argument("--no-open", action="store_true")
     a = ap.parse_args()
@@ -164,11 +167,12 @@ def main():
     Config.out_dir = Path(a.out_dir).expanduser()
     Config.out_dir.mkdir(parents=True, exist_ok=True)
     Config.leak_dir = Path(a.leak_dir).expanduser() if a.leak_dir else None
+    Config.dust_dir = Path(a.dust_dir).expanduser() if a.dust_dir else None
     Config.state_file = (Config.in_dir or Path.home()) / ".film-lab-state.json"
 
     srv = _bind(a.port)
     url = f"http://localhost:{srv.server_address[1]}/"
-    print(f"Film lab on {url}\n  photos: {Config.in_dir or 'import in the app'}\n  saves:  {Config.out_dir}\n  leaks:  {Config.leak_dir or '-'}")
+    print(f"Film lab on {url}\n  photos: {Config.in_dir or 'import in the app'}\n  saves:  {Config.out_dir}\n  leaks:  {Config.leak_dir or '-'}\n  dust:   {Config.dust_dir or '-'}")
     print("Press Ctrl+C to stop.", flush=True)
     if not a.no_open:
         webbrowser.open(url)

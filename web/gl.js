@@ -27,6 +27,18 @@ uniform vec2 uPos, uDir;
 uniform float uSize, uHue, uSeed;
 uniform mat3 uLeakMat;        // real: photo uv -> leak uv
 uniform float uLeakHue;
+// Artifacts (see artifacts.js). Positions in aspect space, sizes in image heights.
+uniform float uArtOpacity, uDustSeed, uDustDensity;
+uniform int uScratchAxis, uNScratch, uNHair, uNSpot;
+uniform vec4 uScratch[8];
+uniform vec2 uScratchAux[8];
+uniform vec4 uHairA[4], uHairB[4];
+uniform vec4 uSpot[5];
+// Scanned dust/scratch overlay: 0 none, 1 screen (light marks), 2 multiply (dark marks).
+uniform sampler2D uDust;
+uniform int uDustBlend;
+uniform mat3 uDustMat;
+uniform float uDustAmt;
 
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p) {
@@ -76,6 +88,97 @@ vec3 hueRotate(vec3 c, float a) { // YIQ rotation
   return fromY * vec3(y.x, y.y * cs - y.z * sn, y.y * sn + y.z * cs);
 }
 
+// Integer hash (lowbias32) -> 0..1, salted per use and by the dust seed.
+uint ihash(uint x) {
+  x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
+  return x;
+}
+float ihash01(ivec2 c, uint salt) {
+  uint h = ihash(uint(c.x) * 0x9E3779B1u ^ ihash(uint(c.y) + uint(uDustSeed) * 0x85EBCA77u) ^ salt * 0xC2B2AE3Du);
+  return float(h) / 4294967295.0;
+}
+
+// Soft coverage of a shape whose edge is d units away, anti-aliased to one pixel.
+float cover(float d) { float aa = fwidth(d) + 1e-6; return 1.0 - smoothstep(-aa, aa, d); }
+
+float segDist(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a, ba = b - a;
+  return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));
+}
+
+vec3 artifacts(vec3 c, vec2 uv) {
+  vec2 p = vec2(uv.x * uAspect, uv.y);
+
+  if (uDustBlend > 0) {
+    vec3 d = texture(uDust, (uDustMat * vec3(uv, 1.0)).xy).rgb;
+    c = uDustBlend == 1 ? screen(c, d * uDustAmt) : mix(c, c * d, uDustAmt);
+  }
+
+  // Water spots: faint drying rings, slightly tinted.
+  for (int i = 0; i < 5; i++) {
+    if (i >= uNSpot) break;
+    vec4 s = uSpot[i];
+    float d = length(p - s.xy);
+    float ring = exp(-pow((d - s.z) / (s.z * 0.06), 2.0));
+    float inside = 1.0 - smoothstep(s.z * 0.9, s.z, d);
+    c *= 1.0 - ring * 0.22 * s.w * uArtOpacity;
+    c = mix(c, c * vec3(1.03, 0.99, 1.02), inside * 0.5 * s.w * uArtOpacity);
+  }
+
+  // Scratches along the film strip. Bright = emulsion scratched through,
+  // dark = scratch in the base. They wobble and break up along their length.
+  float along = uScratchAxis == 0 ? uv.x : uv.y;
+  float across = uScratchAxis == 0 ? uv.y : uv.x;
+  float acrossScale = uScratchAxis == 0 ? 1.0 : uAspect; // to image heights
+  for (int i = 0; i < 8; i++) {
+    if (i >= uNScratch) break;
+    vec4 s = uScratch[i];
+    vec2 aux = uScratchAux[i];
+    if (along < s.y || along > s.z) continue;
+    float wob = (noise(vec2(along * 6.0, aux.x)) - 0.5) * 0.004 + sin(along * 23.0 + aux.x) * 0.0006;
+    float d = abs(across - s.x - wob) * acrossScale - abs(s.w);
+    float breakUp = smoothstep(0.25, 0.55, noise(vec2(along * 40.0, aux.x + 3.0)));
+    float ends = smoothstep(s.y, s.y + 0.03, along) * (1.0 - smoothstep(s.z - 0.03, s.z, along));
+    float a = cover(d) * breakUp * ends * aux.y * uArtOpacity;
+    c = s.w > 0.0 ? mix(c, vec3(0.96, 1.0, 0.97), a) : c * (1.0 - 0.8 * a);
+  }
+
+  // Hairs: thin dark curves (quadratic Bezier, sampled as segments).
+  for (int i = 0; i < 4; i++) {
+    if (i >= uNHair) break;
+    vec2 p0 = uHairA[i].xy, p1 = uHairA[i].zw, p2 = uHairB[i].xy;
+    float d = 1e9;
+    vec2 prev = p0;
+    for (int k = 1; k <= 16; k++) {
+      float t = float(k) / 16.0;
+      vec2 q = mix(mix(p0, p1, t), mix(p1, p2, t), t);
+      d = min(d, segDist(p, prev, q));
+      prev = q;
+    }
+    c *= 1.0 - 0.9 * cover(d - uHairB[i].z) * uHairB[i].w * uArtOpacity;
+  }
+
+  // Dust: mostly tiny, some elongated specks, one chance per grid cell.
+  // Integer hashing keeps the scatter random at any seed (float hashes band).
+  if (uDustDensity > 0.0) {
+    const float cell = 1.0 / 70.0;
+    ivec2 base = ivec2(floor(p / cell));
+    float dark = 0.0;
+    for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+      ivec2 id = base + ivec2(x, y);
+      if (ihash01(id, 0u) > uDustDensity) continue;
+      vec2 centre = (vec2(id) + vec2(ihash01(id, 1u), ihash01(id, 2u))) * cell;
+      float r = mix(0.0005, 0.0024, pow(ihash01(id, 3u), 3.0));
+      float ang = ihash01(id, 4u) * 6.2832;
+      vec2 d = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * (p - centre);
+      d.x /= mix(1.0, 2.2, pow(ihash01(id, 5u), 2.0));
+      dark = max(dark, cover(length(d) - r) * mix(0.55, 1.0, ihash01(id, 6u)));
+    }
+    c *= 1.0 - 0.85 * dark * uArtOpacity;
+  }
+  return c;
+}
+
 void main() {
   vec3 orig = texture(uOrig, v_uv).rgb;
   if (uBefore > 0.5) { o = vec4(orig, 1.0); return; }
@@ -104,6 +207,8 @@ void main() {
   vec3 gc = vec3(gm, texture(uGrain, gu + vec2(0.37, 0.71)).r - 0.5, texture(uGrain, gu + vec2(0.83, 0.19)).r - 0.5);
   vec3 g = mix(vec3(gm), gc, uGrainChroma);
   c += g * uGrainAmt * 0.5 * (0.35 + 2.6 * l * (1.0 - l));
+  // Dust and scratches sit on top of the grain, as on a scanned slide.
+  c = artifacts(clamp(c, 0.0, 1.0), v_uv);
   o = vec4(clamp(c, 0.0, 1.0), 1.0);
 }`;
 
@@ -236,7 +341,38 @@ export class FilmRenderer {
         f("uLeakHue", L.hueShift);
       }
     }
+    this._artifacts(p.artifacts);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  _artifacts(a) {
+    const gl = this.gl;
+    const i = (n, v) => gl.uniform1i(this._u(n), v);
+    // Scanned overlay (texture unit 5).
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_2D, this.tex.dust || this.black);
+    i("uDust", 5);
+    const scan = a?.scan;
+    i("uDustBlend", scan ? scan.blend : 0);
+    if (scan) {
+      gl.uniformMatrix3fv(this._u("uDustMat"), false, scan.matrix);
+      gl.uniform1f(this._u("uDustAmt"), scan.amount);
+    }
+    if (!a || !a.generated) { ["uNScratch", "uNHair", "uNSpot"].forEach((n) => i(n, 0)); gl.uniform1f(this._u("uDustDensity"), 0); return; }
+    a = a.generated;
+    const pad = (arr, len) => { const out = new Float32Array(len); out.set(arr.slice(0, len)); return out; };
+    gl.uniform1f(this._u("uArtOpacity"), a.opacity);
+    gl.uniform1f(this._u("uDustSeed"), a.dustSeed);
+    gl.uniform1f(this._u("uDustDensity"), a.dustDensity);
+    i("uScratchAxis", a.axis);
+    i("uNScratch", a.scratches.length / 4);
+    i("uNHair", a.hairs.length / 4);
+    i("uNSpot", a.spots.length / 4);
+    gl.uniform4fv(this._u("uScratch"), pad(a.scratches, 32));
+    gl.uniform2fv(this._u("uScratchAux"), pad(a.scratchAux, 16));
+    gl.uniform4fv(this._u("uHairA"), pad(a.hairs, 16));
+    gl.uniform4fv(this._u("uHairB"), pad(a.hairsB, 16));
+    gl.uniform4fv(this._u("uSpot"), pad(a.spots, 20));
   }
 
   /** Draw to this renderer's canvas at its current pixel size. */

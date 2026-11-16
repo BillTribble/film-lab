@@ -1,7 +1,8 @@
 # Film lab
 
 Turn digital JPEGs into classic slide film: Kodachrome, Velvia, Ektachrome or Provia
-colour, scanned film grain, halation, vignette, and re-rollable light leaks.
+colour, scanned film grain, halation, vignette, light leaks, and film artifacts such as
+dust and scratches. Light leaks and artifacts can be re-rolled.
 
 **Use it online:** https://billtribble.github.io/film-lab/. Import or drop your
 photos. Everything runs in your browser, and photos never leave your device.
@@ -15,31 +16,32 @@ photos. Everything runs in your browser, and photos never leave your device.
   **More grain types** for black-and-white grain (T-Max 400, Orwo NP20, Tri-X 1600,
   T-Max 3200). Step through films and grains with ‹ ›, or click a name for the full
   list.
-- **Light leaks:** Off, Generated, Scans (your own leak images) or Mix. Re-roll one
-  photo or all of them, and undo with ⌘Z.
-- **Follow the light:** leaks come in from the edge nearest the brightest part of the
-  photo and take on its colour.
+- **Light leaks:** generated glows, streaks and washes. **Follow the light** brings them
+  in from the edge nearest the brightest part of the photo, in its colour.
+- **Artifacts:** generated dust, scratches, hairs and water spots, with an amount
+  slider. Scratches run along the film strip, as they do on a real roll.
+- **Re-roll and undo:** re-roll one photo or all of them, separately for leaks and
+  artifacts. One undo (⌘Z) covers both.
 - **Full-resolution export:** keeps the camera EXIF (date, camera, exposure).
 
-For leak scans, a free pack is available from
-[Spoon Graphics](https://blog.spoongraphics.co.uk/freebies/download-my-free-light-leaks-photo-overlays-to-add-retro-effects-to-your-photos).
-Their terms don't allow re-hosting, so it isn't bundled here. Download it and use
-**Add leak scans**.
+Keys: `R` re-roll leaks, `D` re-roll artifacts (add `Shift` for all photos), `⌘Z` undo,
+arrow keys move between photos, hold `\` to compare with the original.
 
-Keys: `R` re-roll, `Shift+R` re-roll all, `⌘Z` undo, arrow keys move between photos,
-hold `\` to compare with the original.
+## Run it locally (adds scan packs)
 
-## Run it locally
+Running locally adds **Scans** and **Mix** modes for light leaks and artifacts, using
+overlay packs on your own disk. Free packs exist (for example from Spoon Graphics), but
+their terms don't allow re-hosting, so the public site uses generated effects only.
 
-On macOS, double-click **`Film Lab.command`**. It asks for a folder of photos
-(Cancel to import in the app instead) and opens the app in your browser. Exports are
-saved to `~/Downloads`. Leak scans load from a `Light Leaks` folder in `~/Pictures`
-or your Dropbox, or from `FILM_LAB_LEAKS`. Needs Python 3 only.
+On macOS, double-click **`Film Lab.command`**. It asks for a folder of photos (Cancel to
+import in the app instead) and opens the app in your browser. Exports are saved to
+`~/Downloads`. Scans load from `Light Leaks` and `Film Dust` folders in `~/Pictures` or
+your Dropbox, or from `FILM_LAB_LEAKS` / `FILM_LAB_DUST`. Needs Python 3 only.
 
 Or from Terminal:
 
 ```bash
-python3 server.py ~/Pictures/roll-01 --leaks ~/Pictures/light-leaks
+python3 server.py ~/Pictures/roll-01 --leaks ~/Pictures/light-leaks --dust ~/Pictures/film-dust
 ```
 
 If the port is busy (for example, another copy is running), it picks the next free one.
@@ -47,10 +49,10 @@ If the port is busy (for example, another copy is running), it picks the next fr
 ## How it works
 
 The look is one WebGL2 shader: film-stock colour cube → vignette → halation → light
-leak → grain. Grain comes last, because a leak exposes the film and the grain sits
-over everything.
+leak → grain → artifacts. Grain goes after the leak, because a leak exposes the film.
+Dust and scratches sit on top, as on a scanned slide.
 
-The colour cubes and grain tile are pre-built with [G'MIC](https://gmic.eu):
+The colour cubes and grain tiles are pre-built with [G'MIC](https://gmic.eu):
 
 ```bash
 brew install gmic && pip install numpy pillow
