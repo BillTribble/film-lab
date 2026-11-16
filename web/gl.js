@@ -188,10 +188,17 @@ void main() {
 
   // Mist filter: highlights bloom in their own colour and contrast softens a
   // touch, while the blacks stay put (that is what makes it a *black* mist).
+  // Halation strength here, so the mist can take on its red.
+  float halo = texture(uHalo, v_uv).r;
+  float hr = clamp(halo * uHalation * 2.0, 0.0, 1.0);
+
   if (uMist > 0.0) {
     // The slider runs to 4x the original strength: 25% is the old 100%.
     float m = uMist * 4.0;
-    vec3 bloom = texture(uBloom, v_uv).rgb;
+    // A slightly warm glow, turning red where halation is, so the mist
+    // carries the halation's red instead of washing it out to white.
+    vec3 tint = mix(vec3(1.0, 0.9, 0.8), vec3(1.0, 0.5, 0.3), hr);
+    vec3 bloom = texture(uBloom, v_uv).rgb * tint;
     c = screen(c, min(bloom * m, vec3(1.0)));
     c = mix(c, c * 0.93 + 0.035 * smoothstep(0.05, 0.4, c), min(1.0, m * 0.5));
   }
@@ -199,8 +206,10 @@ void main() {
   vec2 q = (v_uv - 0.5) * vec2(uAspect, 1.0) / (0.5 * length(vec2(uAspect, 1.0)));
   c *= 1.0 - uVignette * 0.8 * smoothstep(0.35, 1.05, length(q));
 
-  float halo = texture(uHalo, v_uv).r;
-  c = screen(c, halo * uHalation * vec3(1.0, 0.36, 0.16));
+  // Halation: a deeper, stronger red glow, and a pull of green and blue out
+  // of the glow so the red still shows over bright, misted highlights.
+  c = screen(c, min(halo * uHalation * 1.5 * vec3(1.0, 0.3, 0.12), vec3(1.0)));
+  c.gb *= 1.0 - hr * vec2(0.22, 0.3);
 
   if (uMode > 0) {
     vec3 L = uMode == 1 ? generatedLeak(v_uv)
