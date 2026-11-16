@@ -137,11 +137,12 @@ export function haloMask(peak) {
     return out;
   };
   const side = Math.max(w, h);
-  const tight = blur(m, Math.max(1, Math.round(side * 0.003)));
-  const wide = blur(m, Math.max(1, Math.round(side * 0.012)));
+  const tight = blur(m, Math.max(1, Math.round(side * 0.004)));
+  const wide = blur(m, Math.max(1, Math.round(side * 0.018)));
+  const bleed = blur(m, Math.max(2, Math.round(side * 0.045))); // long red bleed
   const d = new ImageData(w, h);
   for (let i = 0; i < w * h; i++) {
-    const v = Math.min(1, tight[i] * 2.2 + wide[i] * 3.5) * 255;
+    const v = Math.min(1, tight[i] * 2.2 + wide[i] * 3.5 + bleed[i] * 4.5) * 255;
     d.data[i * 4] = d.data[i * 4 + 1] = d.data[i * 4 + 2] = v;
     d.data[i * 4 + 3] = 255;
   }
