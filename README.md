@@ -26,14 +26,20 @@ Their terms don't allow re-hosting, so it isn't bundled here. Download it and us
 Keys: `R` re-roll, `Shift+R` re-roll all, `⌘Z` undo, arrow keys move between photos,
 hold `\` to compare with the original.
 
-## Local folder mode
+## Run it locally
 
-Point it at a folder and the photos load automatically. Exports are saved to
-`~/Downloads`. Needs Python 3 only.
+On macOS, double-click **`Film Lab.command`**. It asks for a folder of photos
+(Cancel to import in the app instead) and opens the app in your browser. Exports are
+saved to `~/Downloads`. Leak scans load from a `Light Leaks` folder in `~/Pictures`
+or your Dropbox, or from `FILM_LAB_LEAKS`. Needs Python 3 only.
+
+Or from Terminal:
 
 ```bash
-python3 server.py --in ~/Pictures/roll-01 --leaks ~/Pictures/light-leaks
+python3 server.py ~/Pictures/roll-01 --leaks ~/Pictures/light-leaks
 ```
+
+If the port is busy (for example, another copy is running), it picks the next free one.
 
 ## How it works
 

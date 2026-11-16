@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import socket
 import threading
 import webbrowser
 from http import HTTPStatus
@@ -91,7 +92,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({
                 "photos": [{"name": n} for n in _list(Config.in_dir, IMAGE_EXT)],
                 "leaks": _list(Config.leak_dir, LEAK_EXT),
-                "inDir": str(Config.in_dir),
+                "inDir": str(Config.in_dir) if Config.in_dir else "",
                 "outDir": str(Config.out_dir),
             })
         if parts[:2] == ["api", "state"]:
@@ -123,27 +124,58 @@ class Handler(SimpleHTTPRequestHandler):
         return self._json({"error": "unknown route"}, HTTPStatus.NOT_FOUND)
 
 
+def _in_use(port: int) -> bool:
+    """True if anything answers on localhost:port (IPv4 or IPv6)."""
+    for host in ("127.0.0.1", "::1"):
+        try:
+            with socket.create_connection((host, port), timeout=0.2):
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def _bind(port: int) -> ThreadingHTTPServer:
+    """Bind the first free port from `port` upward (another copy may be running)."""
+    for p in range(port, port + 20):
+        if _in_use(p):
+            continue
+        try:
+            return ThreadingHTTPServer(("127.0.0.1", p), Handler)
+        except OSError:
+            continue
+    raise SystemExit(f"No free port between {port} and {port + 19}.")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--in", dest="in_dir", default=".", help="folder of JPEGs (default: current folder)")
-    ap.add_argument("--out", dest="out_dir", default=str(Path.home() / "Downloads"), help="where exports go")
+    ap.add_argument("folder", nargs="?", help="folder of JPEGs to load (optional; you can also import in the app)")
+    ap.add_argument("--in", dest="in_dir", help="same as the folder argument")
+    ap.add_argument("--out", dest="out_dir", default=str(Path.home() / "Downloads"), help="where exports go (default: ~/Downloads)")
     ap.add_argument("--leaks", dest="leak_dir", default=os.environ.get("FILM_LAB_LEAKS"), help="folder of light-leak scans")
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8790)))
     ap.add_argument("--no-open", action="store_true")
     a = ap.parse_args()
 
-    Config.in_dir = Path(a.in_dir).expanduser().resolve()
+    folder = a.in_dir or a.folder
+    Config.in_dir = Path(folder).expanduser().resolve() if folder else None
+    if Config.in_dir and not Config.in_dir.is_dir():
+        raise SystemExit(f"Not a folder: {Config.in_dir}")
     Config.out_dir = Path(a.out_dir).expanduser()
     Config.out_dir.mkdir(parents=True, exist_ok=True)
     Config.leak_dir = Path(a.leak_dir).expanduser() if a.leak_dir else None
-    Config.state_file = Config.in_dir / ".film-lab-state.json"
+    Config.state_file = (Config.in_dir or Path.home()) / ".film-lab-state.json"
 
-    srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
-    url = f"http://localhost:{a.port}/"
-    print(f"Film lab on {url}\n  photos: {Config.in_dir}\n  saves:  {Config.out_dir}\n  leaks:  {Config.leak_dir or '-'}")
+    srv = _bind(a.port)
+    url = f"http://localhost:{srv.server_address[1]}/"
+    print(f"Film lab on {url}\n  photos: {Config.in_dir or 'import in the app'}\n  saves:  {Config.out_dir}\n  leaks:  {Config.leak_dir or '-'}")
+    print("Press Ctrl+C to stop.", flush=True)
     if not a.no_open:
         webbrowser.open(url)
-    srv.serve_forever()
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopped.")
 
 
 if __name__ == "__main__":

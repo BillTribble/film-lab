@@ -471,7 +471,7 @@ async function init() {
   Object.assign(app.settings, state.settings || {});
   if (!STOCKS[app.settings.stock]) app.settings.stock = DEFAULTS.stock;
   app.seeds = state.seeds || {};
-  $("#folder-label").textContent = local ? `${local.photos.length} photos from ${local.inDir}` : "";
+  $("#folder-label").textContent = local?.inDir ? `${local.photos.length} photos from ${local.inDir}` : "";
   renderStocks();
   syncControls();
   bindEvents();
