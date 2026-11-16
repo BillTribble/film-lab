@@ -49,8 +49,8 @@ let view, thumbs; // renderers
 async function prepare(photo) {
   if (photo.ready) return photo.ready;
   photo.ready = (async () => {
-    const { thumb, width, height } = await decodeThumb(await photo.getBlob());
-    Object.assign(photo, { thumb, width, height, halo: haloMask(thumb), light: analyseLight(thumb) });
+    const { thumb, peak, width, height } = await decodeThumb(await photo.getBlob());
+    Object.assign(photo, { thumb, width, height, halo: haloMask(peak), light: analyseLight(thumb) });
   })();
   return photo.ready;
 }

@@ -35,7 +35,14 @@ export function decodeFull(blob) {
   return createImageBitmap(blob, { imageOrientation: "from-image" });
 }
 
-/** Small upright copy for the filmstrip, light analysis and halation. */
+const HALO_PX = 640;
+
+/**
+ * Small upright copy for the filmstrip and light analysis, plus a highlight
+ * map for halation. The highlight map keeps the BRIGHTEST pixel of each cell
+ * of the full-resolution photo, so small lights (candles, fairy lights) that
+ * an ordinary downscale would average away still produce a glow.
+ */
 export async function decodeThumb(blob) {
   const full = await createImageBitmap(blob, { imageOrientation: "from-image" });
   const s = THUMB_PX / Math.max(full.width, full.height);
@@ -44,27 +51,55 @@ export async function decodeThumb(blob) {
     resizeHeight: Math.max(1, Math.round(full.height * s)),
     resizeQuality: "high",
   });
+  const peak = peakLuminance(full, HALO_PX);
   const size = { width: full.width, height: full.height };
   full.close();
-  return { thumb, ...size };
+  return { thumb, peak, ...size };
 }
 
-/** Blurred mask of the brightest highlights; the shader tints it red-orange. */
-export function haloMask(img) {
-  const w = img.width, h = img.height;
-  const cv = new OffscreenCanvas(w, h);
+function peakLuminance(img, maxSide) {
+  const W = img.width, H = img.height;
+  const cv = new OffscreenCanvas(W, H);
   const ctx = cv.getContext("2d", { willReadFrequently: true });
   ctx.drawImage(img, 0, 0);
-  const d = ctx.getImageData(0, 0, w, h);
-  let m = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) {
-    const l = (0.299 * d.data[i * 4] + 0.587 * d.data[i * 4 + 1] + 0.114 * d.data[i * 4 + 2]) / 255;
-    m[i] = Math.pow(Math.max(0, (l - 0.8) / 0.2), 1.4);
+  const src = ctx.getImageData(0, 0, W, H).data;
+  const cell = Math.max(1, Math.ceil(Math.max(W, H) / maxSide));
+  const w = Math.ceil(W / cell), h = Math.ceil(H / cell);
+  const data = new Float32Array(w * h);
+  for (let y = 0; y < H; y++) {
+    const row = Math.floor(y / cell) * w;
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const l = (0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2]) / 255;
+      const j = row + Math.floor(x / cell);
+      if (l > data[j]) data[j] = l;
+    }
   }
-  const r = Math.max(1, Math.round(Math.max(w, h) * 0.009));
-  for (let pass = 0; pass < 3; pass++) m = boxBlur(boxBlur(m, w, h, r, true), w, h, r, false);
+  return { w, h, data };
+}
+
+/**
+ * Halation mask from the highlight map: a tight glow plus a wide one, the way
+ * light scatters back through the film base. The shader tints it red-orange.
+ */
+export function haloMask(peak) {
+  const { w, h, data } = peak;
+  const m = new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) {
-    const v = Math.min(255, m[i] * 255);
+    const t = Math.min(1, Math.max(0, (data[i] - 0.72) / 0.26));
+    m[i] = t * t * (3 - 2 * t); // smoothstep(0.72, 0.98)
+  }
+  const blur = (src, r) => {
+    let out = src;
+    for (let pass = 0; pass < 3; pass++) out = boxBlur(boxBlur(out, w, h, r, true), w, h, r, false);
+    return out;
+  };
+  const side = Math.max(w, h);
+  const tight = blur(m, Math.max(1, Math.round(side * 0.003)));
+  const wide = blur(m, Math.max(1, Math.round(side * 0.012)));
+  const d = new ImageData(w, h);
+  for (let i = 0; i < w * h; i++) {
+    const v = Math.min(1, tight[i] * 2.2 + wide[i] * 3.5) * 255;
     d.data[i * 4] = d.data[i * 4 + 1] = d.data[i * 4 + 2] = v;
     d.data[i * 4 + 3] = 255;
   }
