@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>Film lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,400..700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0..1,0" rel="stylesheet">
+  <link rel="stylesheet" href="gm3-color-tokens.css">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Error overlay + boot watchdog: paint failures instead of a blank page.
+    window.__showError = (msg) => {
+      const el = document.getElementById("error-overlay");
+      if (!el) return;
+      el.querySelector(".error-text").textContent = String(msg);
+      el.hidden = false;
+    };
+    window.addEventListener("error", (e) => window.__showError(e.message));
+    window.addEventListener("unhandledrejection", (e) => window.__showError(e.reason && (e.reason.stack || e.reason)));
+    window.addEventListener("load", () => setTimeout(() => {
+      if (!window.__APP_LOADED__) window.__showError("App script did not finish loading.");
+    }, 1500));
+  </script>
+</head>
+<body>
+  <header class="top-bar">
+    <h1 class="title">Film lab</h1>
+    <span class="meta" id="folder-label"></span>
+    <div class="top-actions">
+      <button class="btn-outlined" data-pick="photo-input"><span class="material-symbols-outlined">add_photo_alternate</span>Import photos</button>
+      <button class="btn-tonal" id="export-one"><span class="material-symbols-outlined">download</span>Export photo</button>
+      <button class="btn" id="export-all"><span class="material-symbols-outlined">download</span>Export all</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <nav class="pane strip" id="strip" aria-label="Photos"></nav>
+
+    <section class="stage" id="stage">
+      <canvas id="view" hidden></canvas>
+      <div class="empty" id="empty" hidden>
+        <span class="material-symbols-outlined empty-icon">photo_library</span>
+        <p class="empty-title">Drop JPEGs here</p>
+        <button class="btn" data-pick="photo-input"><span class="material-symbols-outlined">add_photo_alternate</span>Import photos</button>
+        <p class="meta">Photos stay on your device.</p>
+      </div>
+      <div class="stage-status" id="status" hidden></div>
+    </section>
+
+    <aside class="pane controls">
+      <section class="group">
+        <h2 class="section-title">Film stock</h2>
+        <div class="m3-pill-tabs" id="stocks" role="tablist"></div>
+        <label class="slider-row"><span>Stock strength</span><output></output>
+          <input type="range" data-setting="strength" min="0" max="1" step="0.01"></label>
+      </section>
+
+      <section class="group">
+        <h2 class="section-title">Look</h2>
+        <label class="slider-row"><span>Halation</span><output></output>
+          <input type="range" data-setting="halation" min="0" max="1" step="0.01"></label>
+        <label class="slider-row"><span>Vignette</span><output></output>
+          <input type="range" data-setting="vignette" min="0" max="1" step="0.01"></label>
+        <label class="slider-row"><span>Grain</span><output></output>
+          <input type="range" data-setting="grain" min="0" max="1" step="0.01"></label>
+      </section>
+
+      <section class="group">
+        <h2 class="section-title">Light leaks</h2>
+        <div class="m3-pill-tabs gm3-connected-dsp" id="leak-mode" role="tablist">
+          <button role="tab" data-mode="off">Off</button>
+          <button role="tab" data-mode="generated">Generated</button>
+          <button role="tab" data-mode="real">Scans</button>
+          <button role="tab" data-mode="mix">Mix</button>
+        </div>
+        <label class="slider-row"><span>Leak strength</span><output></output>
+          <input type="range" data-setting="leakAmt" min="0" max="1.5" step="0.01"></label>
+        <label class="switch-row">
+          <span>Follow the light</span>
+          <input type="checkbox" class="m3-switch" data-setting="aware">
+        </label>
+        <div class="button-row">
+          <button class="btn-tonal" id="reroll"><span class="material-symbols-outlined">casino</span>Re-roll</button>
+          <button class="btn-outlined" id="reroll-all"><span class="material-symbols-outlined">casino</span>Re-roll all</button>
+          <button class="btn-outlined" id="undo" title="Undo re-roll (⌘Z)"><span class="material-symbols-outlined">undo</span>Undo</button>
+        </div>
+        <div class="button-row" id="real-tools" hidden>
+          <button class="btn-outlined" data-pick="leak-input"><span class="material-symbols-outlined">add</span>Add leak scans</button>
+          <a class="btn-text" id="leak-pack-link" href="https://blog.spoongraphics.co.uk/freebies/download-my-free-light-leaks-photo-overlays-to-add-retro-effects-to-your-photos" target="_blank" rel="noopener">Free leak pack<span class="material-symbols-outlined">open_in_new</span></a>
+        </div>
+        <p class="meta" id="leak-info"></p>
+      </section>
+
+      <button class="btn-outlined compare" id="compare"><span class="material-symbols-outlined">compare</span>Hold to compare</button>
+    </aside>
+  </main>
+
+  <input type="file" id="photo-input" accept="image/jpeg,image/png,image/webp" multiple hidden>
+  <input type="file" id="leak-input" accept="image/jpeg,image/png,image/webp" multiple hidden>
+  <div class="toast" id="toast" hidden></div>
+  <div class="error-overlay" id="error-overlay" hidden>
+    <pre class="error-text"></pre>
+    <button class="btn" onclick="location.reload()">Reload</button>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
