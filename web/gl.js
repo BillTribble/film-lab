@@ -189,9 +189,11 @@ void main() {
   // Mist filter: highlights bloom in their own colour and contrast softens a
   // touch, while the blacks stay put (that is what makes it a *black* mist).
   if (uMist > 0.0) {
+    // The slider runs to 4x the original strength: 25% is the old 100%.
+    float m = uMist * 4.0;
     vec3 bloom = texture(uBloom, v_uv).rgb;
-    c = screen(c, bloom * uMist);
-    c = mix(c, c * 0.93 + 0.035 * smoothstep(0.05, 0.4, c), uMist * 0.5);
+    c = screen(c, min(bloom * m, vec3(1.0)));
+    c = mix(c, c * 0.93 + 0.035 * smoothstep(0.05, 0.4, c), min(1.0, m * 0.5));
   }
 
   vec2 q = (v_uv - 0.5) * vec2(uAspect, 1.0) / (0.5 * length(vec2(uAspect, 1.0)));
