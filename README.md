@@ -10,9 +10,11 @@ photos. Everything runs in your browser, and photos never leave your device.
 
 - **Four slide stocks:** Kodachrome 64, Velvia 50, Ektachrome 100VS and Provia 100F,
   with a strength slider.
-- **Four scanned grains:** T-Max 400, Orwo NP20, Tri-X 1600 and T-Max 3200, from
-  fine to coarse. Pick a film and a grain with the ‹ › steppers. The film sets how
-  much the grain shows as colour dye clouds.
+- **Grain to match each film:** real scanned grain, sized and coloured for each stock.
+  **Match grain to film** keeps them paired. Turn it off to mix and match, or turn on
+  **More grain types** for black-and-white grain (T-Max 400, Orwo NP20, Tri-X 1600,
+  T-Max 3200). Step through films and grains with ‹ ›, or click a name for the full
+  list.
 - **Light leaks:** Off, Generated, Scans (your own leak images) or Mix. Re-roll one
   photo or all of them, and undo with ⌘Z.
 - **Follow the light:** leaks come in from the edge nearest the brightest part of the

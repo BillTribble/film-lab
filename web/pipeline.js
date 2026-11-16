@@ -1,22 +1,29 @@
 // Browser-side image pipeline: decode (EXIF-upright), thumbnails, halation
 // mask, film-stock cubes and the grain tile. No server needed.
 
-// Film stocks set the colour; `chroma` is how much the grain shows as colour
-// dye clouds rather than mono silver grain.
+// Film stocks set the colour (3D LUT in assets/luts/<key>.png).
 export const STOCKS = {
-  kodachrome64: { label: "Kodachrome", full: "Kodachrome 64", chroma: 0.18 },
-  velvia50: { label: "Velvia 50", full: "Fujichrome Velvia 50", chroma: 0.22 },
-  ektachrome100vs: { label: "Ektachrome", full: "Ektachrome 100VS", chroma: 0.28 },
-  provia100f: { label: "Provia 100F", full: "Fujichrome Provia 100F", chroma: 0.15 },
+  kodachrome64: { label: "Kodachrome", full: "Kodachrome 64" },
+  velvia50: { label: "Velvia 50", full: "Fujichrome Velvia 50" },
+  ektachrome100vs: { label: "Ektachrome", full: "Ektachrome 100VS" },
+  provia100f: { label: "Provia 100F", full: "Fujichrome Provia 100F" },
 };
 
-// Scanned grain samples (G'MIC), fine to coarse. size > 1 is coarser;
-// amount scales the Grain slider.
+// Grains. Each uses a scanned tile (assets/grain/<tile>.png). size > 1 is
+// coarser, amount scales the Grain slider, chroma is how much the grain shows
+// as colour dye clouds (colour film) rather than mono silver grain (B&W film).
+// The film grains share keys with STOCKS, so "match grain to film" is a lookup.
+// Their values follow published RMS granularity: Provia finest, Kodachrome crispest.
 export const GRAINS = {
-  tmax400: { label: "T-Max 400", size: 1.0, amount: 0.8 },
-  orwo_np20: { label: "Orwo NP20", size: 1.15, amount: 0.9 },
-  trix1600: { label: "Tri-X 1600", size: 1.4, amount: 1.1 },
-  tmax3200: { label: "T-Max 3200", size: 1.8, amount: 1.35 },
+  kodachrome64: { label: "Kodachrome", full: "Kodachrome 64 grain", tile: "tmax400", size: 1.0, amount: 1.0, chroma: 0.18 },
+  velvia50: { label: "Velvia 50", full: "Velvia 50 grain", tile: "tmax400", size: 0.85, amount: 0.8, chroma: 0.22 },
+  ektachrome100vs: { label: "Ektachrome", full: "Ektachrome 100VS grain", tile: "tmax400", size: 0.85, amount: 0.8, chroma: 0.28 },
+  provia100f: { label: "Provia 100F", full: "Provia 100F grain", tile: "tmax400", size: 0.75, amount: 0.65, chroma: 0.15 },
+  // More grain types (black-and-white scans), fine to coarse.
+  tmax400: { label: "T-Max 400", full: "Kodak T-Max 400", tile: "tmax400", size: 1.0, amount: 0.8, chroma: 0, extra: true },
+  orwo_np20: { label: "Orwo NP20", full: "Orwo NP20", tile: "orwo_np20", size: 1.15, amount: 0.9, chroma: 0, extra: true },
+  trix1600: { label: "Tri-X 1600", full: "Kodak Tri-X 1600", tile: "trix1600", size: 1.4, amount: 1.1, chroma: 0, extra: true },
+  tmax3200: { label: "T-Max 3200", full: "Kodak T-Max 3200", tile: "tmax3200", size: 1.8, amount: 1.35, chroma: 0, extra: true },
 };
 
 const LUT_N = 64;

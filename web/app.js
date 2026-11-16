@@ -13,7 +13,9 @@ const DEFAULTS = {
   halation: 0.25,
   vignette: 0.3,
   grain: 0.35,
-  grainType: "tmax400",
+  grainType: "kodachrome64",
+  matchGrain: true,   // grain follows the film stock
+  extraGrains: false, // also offer the black-and-white grain scans
   leakMode: "generated", // off | generated | real | mix
   leakAmt: 1.0,
   aware: true,
@@ -92,13 +94,19 @@ async function bindStock(r) {
   if (r.lutKey !== app.settings.stock) r.setLut(app.settings.stock, await loadLut(app.settings.stock));
 }
 
+/** The grain in use: the film's own grain when matching, else the chosen one. */
+const currentGrain = () => (app.settings.matchGrain ? app.settings.stock : app.settings.grainType);
+
+/** Grains offered in the stepper and menu. */
+const grainChoices = () => Object.keys(GRAINS).filter((k) => app.settings.extraGrains || !GRAINS[k].extra);
+
 async function bindGrain(r) {
-  const key = app.settings.grainType;
-  if (r.grainKey === key) return;
-  const tile = await loadGrain(key);
-  if (app.settings.grainType !== key) return; // changed again while loading
-  r.setGrain(tile);
-  r.grainKey = key;
+  const tile = GRAINS[currentGrain()].tile;
+  if (r.grainKey === tile) return;
+  const img = await loadGrain(tile);
+  if (GRAINS[currentGrain()].tile !== tile) return; // changed again while loading
+  r.setGrain(img);
+  r.grainKey = tile;
 }
 
 function seedFor(photo, mode) {
@@ -136,12 +144,12 @@ async function leakFor(r, photo) {
 
 function params(photo, leak, { grain = true } = {}) {
   const s = app.settings;
-  const g = GRAINS[s.grainType];
+  const g = GRAINS[currentGrain()];
   return {
     aspect: photo.width / photo.height,
     imageWidth: photo.width, imageHeight: photo.height,
     strength: s.strength, halation: s.halation, vignette: s.vignette,
-    grain: grain ? s.grain * g.amount : 0, grainSize: g.size, grainChroma: STOCKS[s.stock].chroma,
+    grain: grain ? s.grain * g.amount : 0, grainSize: g.size, grainChroma: g.chroma,
     before: app.before, leak,
   };
 }
@@ -304,27 +312,104 @@ function syncEmpty() {
 }
 
 // Film and grain steppers: ‹ value ›, wrapping from last to first and back.
-const STEPPERS = { stock: { options: STOCKS, setting: "stock" }, grain: { options: GRAINS, setting: "grainType" } };
+// Clicking the value opens a menu of every choice.
+const STEPPERS = {
+  stock: {
+    options: STOCKS,
+    choices: () => Object.keys(STOCKS),
+    current: () => app.settings.stock,
+    set: (k) => { app.settings.stock = k; },
+    locked: () => false,
+  },
+  grain: {
+    options: GRAINS,
+    choices: grainChoices,
+    current: currentGrain,
+    set: (k) => { app.settings.grainType = k; },
+    locked: () => app.settings.matchGrain,
+  },
+};
 
-function step(name, dir) {
-  const { options, setting } = STEPPERS[name];
-  const keys = Object.keys(options);
-  const i = keys.indexOf(app.settings[setting]);
-  app.settings[setting] = keys[(i + dir + keys.length) % keys.length];
+function choose(name, key) {
+  STEPPERS[name].set(key);
   syncControls(); // label updates at once; the render follows
   persist();
   requestRender();
 }
 
+function step(name, dir) {
+  const st = STEPPERS[name];
+  if (st.locked()) return;
+  const keys = st.choices();
+  const i = keys.indexOf(st.current());
+  choose(name, keys[(i + dir + keys.length) % keys.length]);
+}
+
+// ---- dropdown menu ----
+function closeMenu() {
+  const menu = $("#menu");
+  if (!menu || menu.hidden) return;
+  menu.hidden = true;
+  document.querySelectorAll(".stepper-value[aria-expanded]").forEach((b) => b.setAttribute("aria-expanded", "false"));
+}
+
+function openMenu(name, anchor) {
+  const st = STEPPERS[name];
+  const menu = $("#menu");
+  if (!menu || st.locked()) return;
+  if (!menu.hidden && menu.dataset.for === name) return closeMenu();
+  const items = [];
+  st.choices().forEach((k, i, keys) => {
+    const opt = st.options[k];
+    if (opt.extra && (i === 0 || !st.options[keys[i - 1]].extra)) {
+      const h = document.createElement("li");
+      h.className = "menu-heading";
+      h.textContent = "More grain types";
+      items.push(h);
+    }
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.className = "menu-item";
+    b.dataset.key = k;
+    b.setAttribute("role", "menuitemradio");
+    b.setAttribute("aria-checked", String(k === st.current()));
+    const tick = document.createElement("span");
+    tick.className = "material-symbols-outlined menu-tick";
+    tick.textContent = "check";
+    const label = document.createElement("span");
+    label.textContent = opt.full || opt.label;
+    b.append(tick, label);
+    li.append(b);
+    items.push(li);
+  });
+  menu.replaceChildren(...items);
+  menu.dataset.for = name;
+  menu.hidden = false;
+  anchor.setAttribute("aria-expanded", "true");
+  // Fixed position under the anchor, kept on screen.
+  const r = anchor.getBoundingClientRect();
+  const w = Math.max(220, r.width);
+  menu.style.width = `${w}px`;
+  menu.style.left = `${Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8)}px`;
+  const below = window.innerHeight - r.bottom;
+  const h = menu.offsetHeight;
+  menu.style.top = `${below > h + 8 ? r.bottom + 4 : Math.max(8, r.top - h - 4)}px`;
+}
+
 function syncControls() {
   const s = app.settings;
+  // Turning extra grains off while one is chosen falls back to the film's grain.
+  if (!grainChoices().includes(s.grainType)) s.grainType = s.stock;
   document.querySelectorAll("[data-stepper]").forEach((el) => {
-    const { options, setting } = STEPPERS[el.dataset.stepper];
-    const opt = options[s[setting]];
+    const st = STEPPERS[el.dataset.stepper];
+    const opt = st.options[st.current()];
     const value = el.querySelector(".stepper-value");
     if (!value || !opt) return;
     value.textContent = opt.label;
     value.title = opt.full || opt.label;
+    const locked = st.locked();
+    el.classList.toggle("locked", locked);
+    el.querySelectorAll("button").forEach((b) => { b.disabled = locked; });
   });
   document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === s.leakMode)));
   document.querySelectorAll("input[data-setting]").forEach((inp) => {
@@ -410,10 +495,25 @@ function bindEvents() {
   });
   document.querySelectorAll("[data-stepper]").forEach((el) => {
     el.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-step]");
-      if (b) step(el.dataset.stepper, Number(b.dataset.step));
+      const arrow = e.target.closest("[data-step]");
+      if (arrow) { closeMenu(); step(el.dataset.stepper, Number(arrow.dataset.step)); return; }
+      const value = e.target.closest(".stepper-value");
+      if (value) openMenu(el.dataset.stepper, value);
     });
   });
+  $("#menu").addEventListener("click", (e) => {
+    const item = e.target.closest(".menu-item");
+    if (!item) return;
+    choose($("#menu").dataset.for, item.dataset.key);
+    closeMenu();
+  });
+  // Dismiss: click outside, Escape, scroll or resize.
+  document.addEventListener("pointerdown", (e) => {
+    if (!e.target.closest("#menu, .stepper-value")) closeMenu();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+  window.addEventListener("resize", closeMenu);
+  document.addEventListener("scroll", closeMenu, true);
   $("#leak-mode").addEventListener("click", (e) => {
     const b = e.target.closest("[data-mode]");
     if (!b) return;
@@ -425,6 +525,8 @@ function bindEvents() {
   document.querySelectorAll("input[data-setting]").forEach((inp) => {
     inp.addEventListener("input", () => {
       app.settings[inp.dataset.setting] = inp.type === "checkbox" ? inp.checked : Number(inp.value);
+      // Unmatching starts the grain picker from the film's own grain.
+      if (inp.dataset.setting === "matchGrain" && !inp.checked) app.settings.grainType = app.settings.stock;
       syncControls();
       persist();
       requestRender();
@@ -464,7 +566,7 @@ function bindEvents() {
 
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undoReroll(); return; }
-    if (e.target.matches("input[type=range]") && e.key.startsWith("Arrow")) return;
+    if (e.target.matches?.("input[type=range]") && e.key.startsWith("Arrow")) return;
     if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); select(app.current + 1); }
     else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); select(app.current - 1); }
     else if (e.key === "r" || e.key === "R") reroll(e.shiftKey);
@@ -489,7 +591,7 @@ async function init() {
   const state = await src.loadState();
   Object.assign(app.settings, state.settings || {});
   if (!STOCKS[app.settings.stock]) app.settings.stock = DEFAULTS.stock;
-  if (!GRAINS[app.settings.grainType]) app.settings.grainType = DEFAULTS.grainType;
+  if (!GRAINS[app.settings.grainType]) app.settings.grainType = app.settings.stock;
   app.seeds = state.seeds || {};
   $("#folder-label").textContent = local?.inDir ? `${local.photos.length} photos from ${local.inDir}` : "";
   syncControls();
