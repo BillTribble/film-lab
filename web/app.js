@@ -5,7 +5,7 @@ import { extractExif, withExif } from "./exif.js";
 import { ARTIFACT_KINDS, anyArtifacts, artifactParams } from "./artifacts.js";
 import * as src from "./sources.js";
 
-const APP_BUILD = "2026-11-16c";
+const APP_BUILD = "2026-11-19a";
 const $ = (sel) => document.querySelector(sel);
 
 // Bump when the default look changes: a saved look from an older build would
@@ -73,15 +73,25 @@ function fullBitmap(photo) {
   return app.full.get(photo.id);
 }
 
-async function addPhotos(list) {
-  const known = new Set(app.photos.map((p) => p.id));
+function clearPhotos() {
+  for (const bmp of app.full.values()) bmp.then((b) => b.close()).catch(() => {});
+  app.full.clear();
+  app.photos = [];
+  if (view) view.photoId = null;
+}
+
+async function addPhotos(list, { replace = false } = {}) {
+  const replaceSamples = replace || (app.photos.length > 0 && app.photos.every((p) => p.sample) && list.some((p) => !p.sample));
+  const known = replaceSamples ? new Set() : new Set(app.photos.map((p) => p.id));
   const fresh = list.filter((p) => !known.has(p.id));
   if (!fresh.length) return;
+  if (replaceSamples) clearPhotos();
   const first = app.photos.length;
   app.photos.push(...fresh);
   renderStrip();
+  syncFolderLabel();
   select(first);
-  for (const p of fresh) await prepare(p).catch((e) => toast(`Could not read ${p.name}: ${e.message}`));
+  await Promise.all(fresh.map((p) => prepare(p).catch((e) => toast(`Could not read ${p.label || p.name}: ${e.message}`))));
   scheduleThumbs();
 }
 
@@ -353,17 +363,43 @@ function persist() {
 
 function renderStrip() {
   $("#strip").replaceChildren(...app.photos.map((p, i) => {
+    const label = p.label || p.name;
     const b = document.createElement("button");
     b.className = "thumb";
     b.dataset.index = i;
-    b.title = p.name;
-    b.setAttribute("aria-label", p.name);
+    b.title = label;
+    b.setAttribute("aria-label", label);
     const cv = document.createElement("canvas");
     cv.className = "thumb-canvas";
+    cv.width = 300;
+    cv.height = 200;
     b.append(cv);
     return b;
   }));
   syncStrip();
+}
+
+function syncFolderLabel() {
+  const el = $("#folder-label");
+  if (!el) return;
+  if (app.localInfo?.inDir && app.localInfo.photos.length) {
+    el.textContent = `${app.localInfo.photos.length} photos from ${app.localInfo.inDir}`;
+    return;
+  }
+  if (app.photos.length && app.photos.every((p) => p.sample)) {
+    el.textContent = "Example photos — import or drop your own";
+    return;
+  }
+  if (app.photos.some((p) => !p.sample)) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-text";
+    btn.textContent = "Example photos";
+    btn.addEventListener("click", () => addPhotos(src.samplePhotos(), { replace: true }));
+    el.replaceChildren(btn);
+    return;
+  }
+  el.textContent = "";
 }
 
 function syncStrip() {
@@ -723,7 +759,8 @@ async function init() {
   if (!STOCKS[app.settings.stock]) app.settings.stock = DEFAULTS.stock;
   if (!GRAINS[app.settings.grainType]) app.settings.grainType = app.settings.stock;
   app.seeds = state.seeds || {};
-  $("#folder-label").textContent = local?.inDir ? `${local.photos.length} photos from ${local.inDir}` : "";
+  app.localInfo = local;
+  syncFolderLabel();
   syncControls();
   bindEvents();
   window.__APP_LOADED__ = true;
@@ -731,7 +768,10 @@ async function init() {
   if (local) {
     app.leakSources = src.leaksFromServer();
     app.dustSources = src.dustFromServer();
-    await addPhotos(src.photosFromServer());
+    const serverPhotos = src.photosFromServer();
+    await addPhotos(serverPhotos.length ? serverPhotos : src.samplePhotos());
+  } else {
+    await addPhotos(src.samplePhotos());
   }
   syncEmpty();
 }
