@@ -16,8 +16,9 @@ photos. Everything runs in your browser, and photos never leave your device.
   **More grain types** for black-and-white grain (T-Max 400, Orwo NP20, Tri-X 1600,
   T-Max 3200). Step through films and grains with ‹ ›, or click a name for the full
   list.
-- **Light leaks:** generated glows, streaks and washes. **Follow the light** brings them
-  in from the edge nearest the brightest part of the photo, in its colour.
+- **Light leaks:** real camera-gate and hinge edge-leak scans (**Scans**), procedural
+  glows/streaks/washes (**Generated**), or **Mix**. **Follow the light** orients leaks from
+  the edge nearest the brightest part of the photo.
 - **Artifacts:** generated dust, scratches, hairs and water spots, with an amount
   slider. Scratches run along the film strip, as they do on a real roll.
 - **Re-roll and undo:** re-roll one photo or all of them, separately for leaks and
@@ -27,11 +28,11 @@ photos. Everything runs in your browser, and photos never leave your device.
 Keys: `R` re-roll leaks, `D` re-roll artifacts (add `Shift` for all photos), `⌘Z` undo,
 arrow keys move between photos, hold `\` to compare with the original.
 
-## Run it locally (adds scan packs)
+## Run it locally (adds custom scan folders)
 
-Running locally adds **Scans** and **Mix** modes for light leaks and artifacts, using
-overlay packs on your own disk. Free packs exist (for example from Spoon Graphics), but
-their terms don't allow re-hosting, so the public site uses generated effects only.
+The public site bundles 8 real camera-gate and hinge light-leak plates out of the box.
+Running locally also loads any extra light-leak packs and **Scans** / **Mix** dust and
+scratch overlay packs from your own disk.
 
 On macOS, double-click **`Film Lab.command`**. It asks for a folder of photos (Cancel to
 import in the app instead) and opens the app in your browser. Exports are saved to
@@ -71,3 +72,4 @@ python3 tools/build_assets.py
   RawTherapee film simulation set by Pat David and contributors, CC BY-SA 4.0.
 - `web/assets/grain/`: rendered from G'MIC's scanned grain samples
   (G'MIC by David Tschumperlé / GREYC, CeCILL).
+- `web/assets/leaks/`: real optical camera-gate and film-burn plates from *Light Leak Hard Edge* by Beachfront B-Roll (CC BY 3.0) and *SFX_film_burn* (CC0 1.0).

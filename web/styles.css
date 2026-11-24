@@ -189,6 +189,8 @@ body.dragging .stage { box-shadow: inset 0 0 0 3px var(--md-sys-color-primary); 
 .gm3-connected-dsp { gap: 2px; flex-wrap: nowrap; }
 .gm3-connected-dsp > button {
   flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
   border-radius: 4px;
   box-shadow: none;
   background-color: var(--md-sys-color-surface-container-highest);
@@ -370,11 +372,9 @@ body.dragging .stage { box-shadow: inset 0 0 0 3px var(--md-sys-color-primary); 
 
 .quick-roll { display: none; }
 
-/* Public site: generated leaks and artifacts only. */
-body.online [data-mode="real"], body.online [data-mode="mix"],
+/* Public site: dust/scratch scan packs are local-only; light-leak scans are bundled. */
 body.online [data-art-mode="scans"], body.online [data-art-mode="mix"],
-body.online #real-tools, body.online #dust-tools { display: none !important; }
-body.online [data-mode="generated"]:not([aria-selected="true"]),
+body.online #dust-tools { display: none !important; }
 body.online [data-art-mode="generated"]:not([aria-selected="true"]) { border-radius: 4px 9999px 9999px 4px; }
 
 /* ---- toggle chips (artifact kinds) ---- */

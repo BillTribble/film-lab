@@ -5,12 +5,12 @@ import { extractExif, withExif } from "./exif.js";
 import { ARTIFACT_KINDS, anyArtifacts, artifactParams } from "./artifacts.js";
 import * as src from "./sources.js";
 
-const APP_BUILD = "2026-11-24a";
+const APP_BUILD = "2026-11-24b";
 const $ = (sel) => document.querySelector(sel);
 
 // Bump when the default look changes: a saved look from an older build would
 // otherwise override the new defaults and the app would open unchanged.
-const STATE_VERSION = 4;
+const STATE_VERSION = 5;
 
 // The default look. Everything here is what a first run starts from.
 const DEFAULTS = {
@@ -23,7 +23,7 @@ const DEFAULTS = {
   grainType: "provia100f", // finest grain, so the Grain dial is what decides
   matchGrain: false,  // pick the grain yourself rather than following the film
   extraGrains: false, // also offer the black-and-white grain scans
-  leakMode: "generated", // off | generated | real | mix
+  leakMode: "real",   // off | generated | real | mix
   leakAmt: 0.44,
   aware: true,
   artMode: "off", // off | generated | scans | mix — artifacts are opt-in
@@ -113,7 +113,7 @@ function loadScans(sources, into, maxPx, label) {
       const k = Math.min(1, maxPx / Math.max(full.width, full.height));
       const img = await createImageBitmap(full, { resizeWidth: Math.round(full.width * k), resizeHeight: Math.round(full.height * k), resizeQuality: "high" });
       full.close();
-      into.push({ name: s.name, img, width: img.width, height: img.height, light: analyseLight(img) });
+      into.push({ name: s.name, label: s.label || s.name, img, width: img.width, height: img.height, light: analyseLight(img) });
     }
     setStatus("");
   })().finally(() => scanLoads.delete(into));
@@ -171,11 +171,12 @@ async function leakFor(r, photo) {
   await ensureLeakLibrary();
   if (!app.leaks.length) return null;
   const L = realLeak(seed, app.leaks, photo.light, aware, aspect);
+  const scan = app.leaks.find((l) => l.name === L.name);
   if (r.leakName !== L.name) {
-    r.setImage("leak", app.leaks.find((l) => l.name === L.name).img);
+    r.setImage("leak", scan.img);
     r.leakName = L.name;
   }
-  return { ...L, amount: L.intensity * leakAmt, bleed: aware };
+  return { ...L, label: scan?.label || L.name, amount: L.intensity * leakAmt, bleed: aware };
 }
 
 /**
@@ -333,10 +334,10 @@ function describeLeak(leak) {
   const el = $("#leak-info");
   if (!el) return;
   if (app.settings.leakMode === "real" && !app.leakSources.length) el.textContent = "No leak scans added yet.";
-  else if (leak && app.settings.leakMode === "mix") el.textContent = `Mix: ${leak.mode === 1 ? `generated ${TYPE_NAMES[leak.type].toLowerCase()}` : leak.name}`;
+  else if (leak && app.settings.leakMode === "mix") el.textContent = `Mix: ${leak.mode === 1 ? `generated ${TYPE_NAMES[leak.type].toLowerCase()}` : (leak.label || leak.name)}`;
   else if (!leak) el.textContent = "";
   else if (leak.mode === 1) el.textContent = `${TYPE_NAMES[leak.type]} from the ${EDGE_NAMES[leak.edge]}, ${Math.round(leak.intensity * 100)}% intensity`;
-  else el.textContent = leak.name;
+  else el.textContent = leak.label || leak.name;
 }
 
 function setStatus(text) {
@@ -664,9 +665,7 @@ function syncControls() {
   const artInfo = $("#art-info");
   if (artInfo) artInfo.textContent = (s.artMode === "scans" && !app.dustSources.length) ? "No dust scans added yet." : "";
   const leaksOn = s.leakMode !== "off";
-  // Follow the light places a generated leak against the brightest part of the
-  // frame; a scanned leak is just an overlay, so the switch means nothing there.
-  $("#aware-row").hidden = s.leakMode !== "generated" && s.leakMode !== "mix";
+  $("#aware-row").hidden = !leaksOn;
   document.querySelectorAll('[data-action="reroll"], [data-action="reroll-all"]').forEach((b) => { b.disabled = !leaksOn; });
   document.querySelectorAll('[data-action="undo"]').forEach((b) => { b.disabled = !app.undo.length; });
   $("#real-tools").hidden = s.leakMode !== "real" && s.leakMode !== "mix";
@@ -895,11 +894,10 @@ async function init() {
   if ((state.version || 0) < STATE_VERSION) state.settings = null;
   Object.assign(app.settings, state.settings || {});
   app.settings.artifacts = { ...DEFAULTS.artifacts, ...(state.settings?.artifacts || {}) };
-  // The public site has generated leaks and artifacts only (scan packs can't be
-  // re-hosted); scans and mix are a local-mode extra.
+  // Bundled camera-gate & hinge light-leak scans work both online and locally;
+  // dust/scratch scan packs remain a local-mode extra.
   document.body.classList.toggle("online", !local);
   if (!local) {
-    if (app.settings.leakMode === "real" || app.settings.leakMode === "mix") app.settings.leakMode = "generated";
     if (app.settings.artMode === "scans" || app.settings.artMode === "mix") app.settings.artMode = "generated";
   }
   $("#artifact-kinds").replaceChildren(...Object.entries(ARTIFACT_KINDS).map(([key, label]) => {
@@ -913,13 +911,13 @@ async function init() {
   if (!GRAINS[app.settings.grainType]) app.settings.grainType = app.settings.stock;
   app.seeds = state.seeds || {};
   app.localInfo = local;
+  app.leakSources = src.allLeakSources();
   syncFolderLabel();
   syncControls();
   bindEvents();
   window.__APP_LOADED__ = true;
   window.filmLab = app; // for debugging from the console
   if (local) {
-    app.leakSources = src.leaksFromServer();
     app.dustSources = src.dustFromServer();
     const serverPhotos = src.photosFromServer();
     await addPhotos(serverPhotos.length ? serverPhotos : src.samplePhotos());

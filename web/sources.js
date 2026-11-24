@@ -14,6 +14,36 @@ const SAMPLES = [
   { file: "04-sea-breeze-motel-night.jpg", label: "Sea Breeze Motel at night" },
 ];
 
+const BUNDLED_LEAKS = [
+  { file: "gate-01-coral-bevel.webp", label: "Gate coral bevel" },
+  { file: "gate-02-amber-border.webp", label: "Gate amber border" },
+  { file: "gate-03-left-hinge-ruby.webp", label: "Left hinge ruby burn" },
+  { file: "gate-04-crimson-streaks.webp", label: "Twin crimson streaks" },
+  { file: "gate-05-thin-top-slit.webp", label: "Thin top gate slit" },
+  { file: "gate-06-narrow-left-seam.webp", label: "Narrow left hinge seam" },
+  { file: "gate-07-top-amber-bevel.webp", label: "Top amber gate bevel" },
+  { file: "gate-08-right-crimson-ribbon.webp", label: "Right crimson burn" },
+];
+
+export function bundledLeaks() {
+  return BUNDLED_LEAKS.map((l) => {
+    let blobPromise = null;
+    return {
+      id: `bundled:${l.file}`,
+      name: l.file,
+      label: l.label,
+      bundled: true,
+      getBlob: () => (blobPromise ||= fetch(`assets/leaks/${l.file}`).then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.blob();
+      }).catch((e) => {
+        blobPromise = null;
+        throw e;
+      })),
+    };
+  });
+}
+
 export function samplePhotos() {
   return SAMPLES.map((s) => {
     let blobPromise = null;
@@ -64,6 +94,13 @@ export function leaksFromServer() {
     name,
     getBlob: () => fetch(`api/leak/${encodeURIComponent(name)}`).then((r) => r.blob()),
   }));
+}
+
+export function allLeakSources() {
+  const bundled = bundledLeaks();
+  const seen = new Set(bundled.map((b) => b.name.toLowerCase()));
+  const extra = leaksFromServer().filter((s) => !seen.has(s.name.toLowerCase()));
+  return [...bundled, ...extra];
 }
 
 export function dustFromServer() {
