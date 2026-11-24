@@ -97,12 +97,17 @@
     <nav class="pane strip" id="strip" aria-label="Photos"></nav>
 
     <section class="stage" id="stage">
-      <canvas id="view" hidden></canvas>
-      <div class="empty" id="empty" hidden>
-        <span class="material-symbols-outlined empty-icon">photo_library</span>
-        <p class="empty-title">Drop JPEGs here</p>
-        <button class="btn" data-pick="photo-input"><span class="material-symbols-outlined">add_photo_alternate</span>Import photos</button>
-        <p class="meta">Photos stay on your device.</p>
+      <div class="stage-viewport" id="stage-viewport">
+        <canvas id="view" hidden></canvas>
+        <div class="empty" id="empty" hidden>
+          <span class="material-symbols-outlined empty-icon">photo_library</span>
+          <p class="empty-title">Drop JPEGs here</p>
+          <button class="btn" data-pick="photo-input"><span class="material-symbols-outlined">add_photo_alternate</span>Import photos</button>
+          <p class="meta">Photos stay on your device.</p>
+        </div>
+      </div>
+      <div class="stage-bar" id="stage-bar" hidden>
+        <button class="btn-outlined compare" id="compare" type="button" aria-pressed="false" title="Hold to compare with original (\)"><span class="material-symbols-outlined">compare</span>Hold to compare</button>
       </div>
       <div class="stage-status" id="status" hidden></div>
     </section>
@@ -147,14 +152,75 @@
 
       <section class="group">
         <h2 class="section-title">Look</h2>
-        <label class="slider-row"><span>Halation</span><output></output>
-          <input type="range" data-setting="halation" min="0" max="1" step="0.01"></label>
-        <label class="slider-row" title="Like a Black Pro-Mist filter: highlights glow softly"><span>Mist</span><output></output>
-          <input type="range" data-setting="mist" min="0" max="1" step="0.01"></label>
-        <label class="slider-row"><span>Vignette</span><output></output>
-          <input type="range" data-setting="vignette" min="0" max="1" step="0.01"></label>
-        <label class="slider-row"><span>Grain</span><output></output>
-          <input type="range" data-setting="grain" min="0" max="1" step="0.01"></label>
+        <div class="look-dial-grid" aria-label="Look controls">
+          <div class="rotary-dial-card control-row has-rotary-dial" data-dial-row="halation" title="Drag up/down or scroll to adjust · Double-click to reset">
+            <div class="m3-rotary-dial rotary-dial-widget" id="dial-widget-halation" role="slider" tabindex="0"
+                 aria-label="Halation" aria-valuemin="0" aria-valuemax="100" aria-valuenow="36" aria-valuetext="36%">
+              <svg class="rotary-dial-svg" viewBox="0 0 56 56" aria-hidden="true">
+                <path class="rotary-dial-track-arc"></path>
+                <path class="rotary-dial-value-arc"></path>
+                <circle class="rotary-dial-cap" cx="28" cy="28" r="13.5"></circle>
+                <line class="rotary-dial-tick" x1="28" y1="28" x2="28" y2="17.5"></line>
+              </svg>
+            </div>
+            <div class="control-label-line">
+              <label for="dial-halation">Halation</label>
+              <output class="control-value" for="dial-halation">36%</output>
+            </div>
+            <input type="range" id="dial-halation" data-setting="halation" min="0" max="1" step="0.01">
+          </div>
+
+          <div class="rotary-dial-card control-row has-rotary-dial" data-dial-row="mist" title="Like a Black Pro-Mist filter: highlights glow softly · Double-click to reset">
+            <div class="m3-rotary-dial rotary-dial-widget" id="dial-widget-mist" role="slider" tabindex="0"
+                 aria-label="Mist" aria-valuemin="0" aria-valuemax="100" aria-valuenow="33" aria-valuetext="33%">
+              <svg class="rotary-dial-svg" viewBox="0 0 56 56" aria-hidden="true">
+                <path class="rotary-dial-track-arc"></path>
+                <path class="rotary-dial-value-arc"></path>
+                <circle class="rotary-dial-cap" cx="28" cy="28" r="13.5"></circle>
+                <line class="rotary-dial-tick" x1="28" y1="28" x2="28" y2="17.5"></line>
+              </svg>
+            </div>
+            <div class="control-label-line">
+              <label for="dial-mist">Mist</label>
+              <output class="control-value" for="dial-mist">33%</output>
+            </div>
+            <input type="range" id="dial-mist" data-setting="mist" min="0" max="1" step="0.01">
+          </div>
+
+          <div class="rotary-dial-card control-row has-rotary-dial" data-dial-row="vignette" title="Drag up/down or scroll to adjust · Double-click to reset">
+            <div class="m3-rotary-dial rotary-dial-widget" id="dial-widget-vignette" role="slider" tabindex="0"
+                 aria-label="Vignette" aria-valuemin="0" aria-valuemax="100" aria-valuenow="18" aria-valuetext="18%">
+              <svg class="rotary-dial-svg" viewBox="0 0 56 56" aria-hidden="true">
+                <path class="rotary-dial-track-arc"></path>
+                <path class="rotary-dial-value-arc"></path>
+                <circle class="rotary-dial-cap" cx="28" cy="28" r="13.5"></circle>
+                <line class="rotary-dial-tick" x1="28" y1="28" x2="28" y2="17.5"></line>
+              </svg>
+            </div>
+            <div class="control-label-line">
+              <label for="dial-vignette">Vignette</label>
+              <output class="control-value" for="dial-vignette">18%</output>
+            </div>
+            <input type="range" id="dial-vignette" data-setting="vignette" min="0" max="1" step="0.01">
+          </div>
+
+          <div class="rotary-dial-card control-row has-rotary-dial" data-dial-row="grain" title="Drag up/down or scroll to adjust · Double-click to reset">
+            <div class="m3-rotary-dial rotary-dial-widget" id="dial-widget-grain" role="slider" tabindex="0"
+                 aria-label="Grain" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" aria-valuetext="100%">
+              <svg class="rotary-dial-svg" viewBox="0 0 56 56" aria-hidden="true">
+                <path class="rotary-dial-track-arc"></path>
+                <path class="rotary-dial-value-arc"></path>
+                <circle class="rotary-dial-cap" cx="28" cy="28" r="13.5"></circle>
+                <line class="rotary-dial-tick" x1="28" y1="28" x2="28" y2="17.5"></line>
+              </svg>
+            </div>
+            <div class="control-label-line">
+              <label for="dial-grain">Grain</label>
+              <output class="control-value" for="dial-grain">100%</output>
+            </div>
+            <input type="range" id="dial-grain" data-setting="grain" min="0" max="1" step="0.01">
+          </div>
+        </div>
       </section>
 
       <section class="group">
@@ -201,8 +267,6 @@
         </div>
         <p class="meta" id="art-info"></p>
       </section>
-
-      <button class="btn-outlined compare" id="compare"><span class="material-symbols-outlined">compare</span>Hold to compare</button>
     </aside>
   </main>
 

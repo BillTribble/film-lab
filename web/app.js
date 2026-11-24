@@ -5,26 +5,26 @@ import { extractExif, withExif } from "./exif.js";
 import { ARTIFACT_KINDS, anyArtifacts, artifactParams } from "./artifacts.js";
 import * as src from "./sources.js";
 
-const APP_BUILD = "2026-11-19a";
+const APP_BUILD = "2026-11-24a";
 const $ = (sel) => document.querySelector(sel);
 
 // Bump when the default look changes: a saved look from an older build would
 // otherwise override the new defaults and the app would open unchanged.
-const STATE_VERSION = 3;
+const STATE_VERSION = 4;
 
 // The default look. Everything here is what a first run starts from.
 const DEFAULTS = {
   stock: "kodachrome64",
   strength: 1,
-  halation: 0.37,
-  mist: 0.88,
+  halation: 0.36,
+  mist: 0.33,
   vignette: 0.18,
   grain: 1.0,
-  grainType: "provia100f", // finest grain, so the Grain slider is what decides
+  grainType: "provia100f", // finest grain, so the Grain dial is what decides
   matchGrain: false,  // pick the grain yourself rather than following the film
   extraGrains: false, // also offer the black-and-white grain scans
   leakMode: "generated", // off | generated | real | mix
-  leakAmt: 1.0,
+  leakAmt: 0.44,
   aware: true,
   artMode: "off", // off | generated | scans | mix — artifacts are opt-in
   artifacts: { dust: true, scratches: true, hairs: false, spots: false },
@@ -267,13 +267,13 @@ function requestRender() {
 }
 
 function sizeCanvas(photo) {
-  const stage = $("#stage");
-  const pad = 16;
-  // Phones: the page scrolls, so fit the photo to the width (capped at 75% of the
-  // screen height). Desktop: fit inside the stage.
+  const vp = $("#stage-viewport") || $("#stage");
+  // Phones: the page scrolls, so fit the photo to the stage width with room for
+  // the Hold to compare bar underneath. Desktop: fit inside the stage viewport.
   const phone = matchMedia("(max-width: 840px)").matches;
-  const maxH = phone ? window.innerHeight * 0.75 : stage.clientHeight - pad * 2;
-  const scale = Math.min((stage.clientWidth - pad * 2) / photo.width, maxH / photo.height);
+  const maxW = Math.max(1, vp.clientWidth - (phone ? 0 : 32));
+  const maxH = Math.max(1, phone ? window.innerHeight * 0.62 : vp.clientHeight - 24);
+  const scale = Math.min(maxW / photo.width, maxH / photo.height);
   const cssW = Math.max(1, Math.floor(photo.width * scale)), cssH = Math.max(1, Math.floor(photo.height * scale));
   const dpr = window.devicePixelRatio || 1;
   const cv = $("#view");
@@ -410,6 +410,8 @@ function syncEmpty() {
   const empty = !app.photos.length;
   $("#empty").hidden = !empty;
   $("#view").hidden = empty;
+  const bar = $("#stage-bar");
+  if (bar) bar.hidden = empty;
   ["#export-one", "#export-all"].forEach((id) => { $(id).disabled = empty; });
 }
 
@@ -498,6 +500,136 @@ function openMenu(name, anchor) {
   menu.style.top = `${below > h + 8 ? r.bottom + 4 : Math.max(8, r.top - h - 4)}px`;
 }
 
+// ---- 270° SVG rotary dials (Look controls) ----
+function dialPoint(cx, cy, r, angleDeg) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function dialArc(cx, cy, r, startDeg, endDeg) {
+  const span = Math.max(0.25, endDeg - startDeg);
+  const start = dialPoint(cx, cy, r, startDeg + span);
+  const end = dialPoint(cx, cy, r, startDeg);
+  const largeArc = span <= 180 ? "0" : "1";
+  return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 ${largeArc} 0 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
+}
+
+const DIAL_TRACK_D = dialArc(28, 28, 21, -135, 135);
+
+function updateRotaryDial(row, rawVal) {
+  const inp = row.querySelector('input[type="range"]');
+  const widget = row.querySelector(".m3-rotary-dial");
+  const track = row.querySelector(".rotary-dial-track-arc");
+  const arc = row.querySelector(".rotary-dial-value-arc");
+  const tick = row.querySelector(".rotary-dial-tick");
+  const out = row.querySelector(".control-value");
+  if (!inp || !track || !arc) return;
+  const min = Number(inp.min || 0), max = Number(inp.max || 1);
+  const val = Math.max(min, Math.min(max, Number(rawVal ?? inp.value ?? 0)));
+  const norm = max > min ? (val - min) / (max - min) : 0;
+  const deg = -135 + norm * 270;
+  if (track.getAttribute("d") !== DIAL_TRACK_D) track.setAttribute("d", DIAL_TRACK_D);
+  arc.setAttribute("d", dialArc(28, 28, 21, -135, -135 + Math.max(0.002, norm) * 270));
+  arc.style.opacity = norm <= 0.002 ? "0" : "1";
+  if (tick) {
+    const p0 = dialPoint(28, 28, 4.2, deg), p1 = dialPoint(28, 28, 11.2, deg);
+    tick.setAttribute("x1", p0.x.toFixed(2));
+    tick.setAttribute("y1", p0.y.toFixed(2));
+    tick.setAttribute("x2", p1.x.toFixed(2));
+    tick.setAttribute("y2", p1.y.toFixed(2));
+  }
+  const pct = Math.round(norm * 100);
+  if (out) out.textContent = `${pct}%`;
+  if (widget) {
+    widget.setAttribute("aria-valuenow", String(pct));
+    widget.setAttribute("aria-valuetext", `${pct}%`);
+  }
+}
+
+function bindRotaryDials() {
+  document.querySelectorAll(".rotary-dial-card").forEach((row) => {
+    const widget = row.querySelector(".m3-rotary-dial");
+    const inp = row.querySelector('input[type="range"]');
+    if (!widget || !inp) return;
+    const key = inp.dataset.setting;
+    const min = Number(inp.min || 0), max = Number(inp.max || 1), stepSize = Number(inp.step || 0.01);
+
+    const apply = (next) => {
+      const stepped = Math.round(next / stepSize) * stepSize;
+      const clamped = Math.max(min, Math.min(max, Number(stepped.toFixed(4))));
+      if (app.settings[key] === clamped) {
+        updateRotaryDial(row, clamped);
+        return;
+      }
+      app.settings[key] = clamped;
+      inp.value = String(clamped);
+      updateRotaryDial(row, clamped);
+      persist();
+      requestRender();
+    };
+
+    let startY = 0, startVal = 0, dragged = false, lastTap = 0;
+
+    row.addEventListener("pointerdown", (e) => {
+      if (e.button && e.button !== 0) return;
+      e.preventDefault();
+      try { widget.focus({ preventScroll: true }); } catch {}
+      startY = e.clientY;
+      startVal = Number(app.settings[key] ?? DEFAULTS[key] ?? 0);
+      dragged = false;
+      row.classList.add("dragging");
+      try { row.setPointerCapture(e.pointerId); } catch {}
+
+      const onMove = (ev) => {
+        const dy = startY - ev.clientY;
+        if (Math.abs(dy) > 2) dragged = true;
+        const sens = ev.shiftKey ? 520 : 140;
+        apply(startVal + (dy / sens) * (max - min));
+      };
+      const onEnd = (ev) => {
+        row.classList.remove("dragging");
+        row.removeEventListener("pointermove", onMove);
+        row.removeEventListener("pointerup", onEnd);
+        row.removeEventListener("pointercancel", onEnd);
+        if (!dragged && ev.type === "pointerup" && ev.pointerType === "touch") {
+          const now = performance.now();
+          if (now - lastTap < 300) {
+            lastTap = 0;
+            apply(DEFAULTS[key]);
+          } else {
+            lastTap = now;
+          }
+        }
+      };
+      row.addEventListener("pointermove", onMove);
+      row.addEventListener("pointerup", onEnd);
+      row.addEventListener("pointercancel", onEnd);
+    });
+
+    row.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      apply(DEFAULTS[key]);
+    });
+
+    row.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const dir = e.deltaY < 0 ? 1 : -1;
+      apply(Number(app.settings[key]) + dir * stepSize * (e.shiftKey ? 1 : 2));
+    }, { passive: false });
+
+    widget.addEventListener("keydown", (e) => {
+      const cur = Number(app.settings[key]);
+      const coarse = e.shiftKey ? stepSize * 5 : stepSize;
+      if (e.key === "ArrowUp" || e.key === "ArrowRight") { e.preventDefault(); apply(cur + coarse); }
+      else if (e.key === "ArrowDown" || e.key === "ArrowLeft") { e.preventDefault(); apply(cur - coarse); }
+      else if (e.key === "PageUp") { e.preventDefault(); apply(cur + stepSize * 10); }
+      else if (e.key === "PageDown") { e.preventDefault(); apply(cur - stepSize * 10); }
+      else if (e.key === "Home") { e.preventDefault(); apply(min); }
+      else if (e.key === "End") { e.preventDefault(); apply(max); }
+    });
+  });
+}
+
 function syncControls() {
   const s = app.settings;
   // Turning extra grains off while one is chosen falls back to the film's grain.
@@ -518,6 +650,8 @@ function syncControls() {
     const v = s[inp.dataset.setting];
     if (inp.type === "checkbox") { inp.checked = !!v; return; }
     inp.value = v;
+    const dialRow = inp.closest(".rotary-dial-card");
+    if (dialRow) { updateRotaryDial(dialRow, v); return; }
     const out = inp.parentElement.querySelector("output");
     if (out) out.textContent = `${Math.round(v * 100)}%`;
   });
@@ -705,14 +839,33 @@ function bindEvents() {
     await addPhotos(src.fromFiles(e.dataTransfer.files));
   }));
 
+  bindRotaryDials();
+
   const cmp = $("#compare");
-  const hold = (v) => { app.before = v; requestRender(); };
-  cmp.addEventListener("pointerdown", (e) => { e.preventDefault(); hold(true); });
-  ["pointerup", "pointerleave", "pointercancel"].forEach((t) => cmp.addEventListener(t, () => hold(false)));
+  const hold = (v) => {
+    if (app.before === v) return;
+    app.before = v;
+    cmp.setAttribute("aria-pressed", String(v));
+    requestRender();
+  };
+  cmp.addEventListener("pointerdown", (e) => {
+    if (e.button && e.button !== 0) return;
+    e.preventDefault();
+    try { cmp.setPointerCapture(e.pointerId); } catch {}
+    hold(true);
+  });
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach((t) => cmp.addEventListener(t, () => hold(false)));
+  cmp.addEventListener("keydown", (e) => {
+    if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); hold(true); }
+  });
+  cmp.addEventListener("keyup", (e) => {
+    if (e.key === " " || e.key === "Enter") { e.preventDefault(); hold(false); }
+  });
+  cmp.addEventListener("blur", () => hold(false));
 
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undoReroll(); return; }
-    if (e.target.matches?.("input[type=range]") && e.key.startsWith("Arrow")) return;
+    if (e.target.matches?.('input[type="range"], [role="slider"]') && (e.key.startsWith("Arrow") || e.key === "Home" || e.key === "End" || e.key.startsWith("Page"))) return;
     if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); select(app.current + 1); }
     else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); select(app.current - 1); }
     else if (e.key === "r" || e.key === "R") reroll(e.shiftKey);
